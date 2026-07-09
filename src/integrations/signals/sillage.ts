@@ -1,5 +1,6 @@
-import axios, { type AxiosInstance } from "axios";
+import type { AxiosInstance } from "axios";
 import { z } from "zod";
+import { sillageHttp } from "@/integrations/signals/http";
 import type { SignalSource } from "@/integrations/signals/port";
 import { env } from "@/lib/env";
 import { SignalSchema, type Signal } from "@/types/pipeline";
@@ -17,8 +18,6 @@ import { SignalSchema, type Signal } from "@/types/pipeline";
 //   keyword_detection (funding words)      → funding
 // Anything else is skipped: Re:lay only revives deals on events it can
 // argue about.
-
-const BASE_URL = "https://api.getsillage.com";
 
 // v1 paginates by offset; we walk pages but stop at a sane ceiling so a busy
 // workspace can never balloon a single list() call.
@@ -108,28 +107,8 @@ const TopAccountListSchema = z.object({ data: z.array(TopAccountSchema) });
 export class SillageSignalSource implements SignalSource {
   private http: AxiosInstance;
 
-  constructor(
-    private apiKey: string,
-    http?: AxiosInstance,
-  ) {
-    this.http =
-      http ??
-      axios.create({
-        baseURL: `${BASE_URL}/api`,
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-    // Preserve the readable, path-aware error the hand-rolled fetch wrapper
-    // used to throw — axios's default message drops the path.
-    this.http.interceptors.response.use(undefined, (error) => {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Sillage API ${error.config?.url} responded ${error.response?.status}`);
-      }
-      throw error;
-    });
+  constructor(apiKey: string, http?: AxiosInstance) {
+    this.http = http ?? sillageHttp(apiKey);
   }
 
   async list(): Promise<Signal[]> {

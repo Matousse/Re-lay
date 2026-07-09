@@ -1,4 +1,6 @@
+import { resetCompanyContext } from "@/integrations/company-context";
 import { fetchConnectorStates, resetConnectors } from "@/integrations/connectors";
+import { resetNotificationRouting } from "@/integrations/notifications/routing";
 import {
   activateSimulatedCase,
   fetchCase,
@@ -90,6 +92,8 @@ export async function resetDemoState(): Promise<void> {
   await resetDemo();
   await resetConnectors();
   getPipelineBridge().reset();
+  resetCompanyContext();
+  resetNotificationRouting();
 }
 
 export type DecisionOutcome = { case: ReengagementCase; effects: DecisionEffects };

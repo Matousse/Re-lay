@@ -1,14 +1,18 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import { Plug } from "lucide-react";
+import { KeyRound, Plug, Sparkles } from "lucide-react";
 import { ConnectDialog } from "@/components/connectors/connect-dialog";
 import { RefreshHubspotButton } from "@/components/connectors/refresh-hubspot-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CONNECTOR_LOGOS } from "@/lib/logos";
+import { CONNECTOR_LOGOS, PLATFORM_LOGOS } from "@/lib/logos";
 import { ENTER, enterDelay } from "@/lib/motion";
 import { cn } from "@/lib/utils";
-import { getConnectorStates } from "@/services/connectors";
+import {
+  getConnectorStates,
+  platformIntegrations,
+  type PlatformIntegration,
+} from "@/services/connectors";
 import { getHubSpotHealth } from "@/services/health";
 import type { ConnectorId } from "@/types/connectors";
 
@@ -61,8 +65,53 @@ const INTEGRATIONS: {
   },
 ];
 
+// The platform pieces around the core stack: powered by real env keys, shown
+// as live status rather than a demo connect flow. Keyed on the service's id
+// union so a drifting id fails to compile instead of crashing the render.
+const PLATFORM_META: Record<
+  PlatformIntegration["id"],
+  { name: string; role: string; description: string; logo: string }
+> = {
+  anthropic: {
+    name: "Anthropic",
+    role: "The agent's brain",
+    description:
+      "Claude powers every judgment: the pipeline's autopsy, verdict and email (Sonnet 5) and the Ask Re:lay assistant (Haiku 4.5).",
+    logo: PLATFORM_LOGOS.anthropic,
+  },
+  slack: {
+    name: "Slack",
+    role: "Team announcements",
+    description:
+      "Approved plays and pending reviews land in the channel as Block Kit messages, @-mentioning the assigned owner.",
+    logo: PLATFORM_LOGOS.slack,
+  },
+  resend: {
+    name: "Resend",
+    role: "Email notifications",
+    description:
+      "The same events go out by email to the assigned owner — so a play never dies unseen in a channel.",
+    logo: PLATFORM_LOGOS.resend,
+  },
+  gamma: {
+    name: "Gamma",
+    role: "Deck generation",
+    description:
+      "Every approved play ships with a personalized why-now micro-deck the rep can send or present.",
+    logo: PLATFORM_LOGOS.gamma,
+  },
+  gradium: {
+    name: "Gradium",
+    role: "Voice",
+    description:
+      "Ultra-low-latency speech on the Ask Re:lay bubble — run and approve plays out loud.",
+    logo: PLATFORM_LOGOS.gradium,
+  },
+};
+
 export default async function IntegrationsPage() {
   const [states, hubspotHealth] = await Promise.all([getConnectorStates(), getHubSpotHealth()]);
+  const platform = platformIntegrations();
   // HubSpot shows real numbers when a token is live; with no token it stays in
   // pure demo mode (the mocked story below). Either/or — never a mix.
   const hubspotLive = hubspotHealth.mode === "live";
@@ -76,6 +125,7 @@ export default async function IntegrationsPage() {
         </p>
       </div>
 
+      <h2 className={`text-muted-foreground mb-3 text-sm font-medium ${ENTER}`}>Core stack</h2>
       <div className="grid gap-4 md:grid-cols-3">
         {INTEGRATIONS.map((integration, index) => {
           // For HubSpot with a live token, the badge reflects the real probe;
@@ -174,6 +224,74 @@ export default async function IntegrationsPage() {
                         successDetail={integration.successDetail}
                       />
                     </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      <h2 className={`text-muted-foreground mt-10 mb-3 text-sm font-medium ${ENTER}`}>
+        Platform &amp; channels
+      </h2>
+      <div className="grid gap-4 md:grid-cols-3">
+        {platform.map((piece, index) => {
+          const meta = PLATFORM_META[piece.id];
+          return (
+            <Card
+              key={piece.id}
+              className={cn(
+                "group transition-all duration-300 hover:-translate-y-1 hover:shadow-lg",
+                piece.status !== "connected" && "border-dashed",
+                piece.status === "soon" && "opacity-90",
+                ENTER,
+              )}
+              style={enterDelay(index + 4)}
+            >
+              <CardHeader>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="relative flex size-9 items-center justify-center rounded-lg border bg-white shadow-sm transition-all duration-300 group-hover:scale-110">
+                    <Image src={meta.logo} alt="" width={20} height={20} />
+                  </span>
+                  {piece.status === "connected" && (
+                    <Badge
+                      variant="secondary"
+                      className="bg-emerald-600/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400"
+                    >
+                      <span className="relative flex size-2">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60 motion-reduce:animate-none" />
+                        <span className="relative inline-flex size-2 rounded-full bg-emerald-600 dark:bg-emerald-400" />
+                      </span>
+                      Connected
+                    </Badge>
+                  )}
+                  {piece.status === "missing" && (
+                    <Badge variant="secondary" className="text-muted-foreground">
+                      <KeyRound aria-hidden />
+                      Key missing
+                    </Badge>
+                  )}
+                  {piece.status === "soon" && (
+                    <Badge
+                      variant="secondary"
+                      className="bg-primary/10 text-primary dark:bg-primary/15"
+                    >
+                      <Sparkles aria-hidden />
+                      Coming soon
+                    </Badge>
+                  )}
+                </div>
+                <CardTitle className="text-base">{meta.name}</CardTitle>
+                <CardDescription>{meta.role}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <p className="text-muted-foreground">{meta.description}</p>
+                <div className="border-t pt-3">
+                  {piece.status === "connected" ? (
+                    <p className="font-medium">{piece.detail}</p>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">{piece.hint}</p>
                   )}
                 </div>
               </CardContent>

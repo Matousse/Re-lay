@@ -9,10 +9,13 @@ export type RelayEvent =
 
 // Neutral message model: the service renders an event into this once, and
 // each channel formats it for its own wire (Slack Block Kit, email HTML).
+// `audience` is the assigned owner — Slack @-mentions them, email targets
+// them directly.
 export type ChannelMessage = {
   headline: string;
   facts: { label: string; value: string }[];
   footer?: string;
+  audience?: { name: string; slackMemberId?: string };
 };
 
 // Per-channel delivery outcome — false covers both "not configured" and

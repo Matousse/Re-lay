@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  resetNotificationRouting,
+  saveNotificationRouting,
+} from "@/integrations/notifications/routing";
 import type { ChannelMessage } from "@/types/notifications";
 import type { ReengagementCase } from "@/types/reengagement";
 import { dispatchEvent } from "./notifications";
@@ -82,6 +86,25 @@ describe("dispatchEvent", () => {
     expect(message.headline).toContain("ready for review");
     expect(JSON.stringify(message.facts)).toContain("Champion moved to VP Sales Operations");
     expect(message.footer).toContain("until a human approves");
+  });
+
+  it("carries the assigned owner to every channel", async () => {
+    saveNotificationRouting({ name: "Sam", email: "sam@team.dev", slackMemberId: "U0123ABCD" });
+    try {
+      const slack = capturingChannel();
+      const email = vi.fn(async (_message: ChannelMessage, opts?: { to?: string }) => {
+        expect(opts?.to).toBe("sam@team.dev");
+        return true;
+      });
+      await dispatchEvent(
+        { type: "play_approved", case: CASE },
+        { slack: slack.send, email: email as never },
+      );
+      expect(slack.seen[0].audience).toEqual({ name: "Sam", slackMemberId: "U0123ABCD" });
+      expect(email).toHaveBeenCalled();
+    } finally {
+      resetNotificationRouting();
+    }
   });
 
   it("reports each channel independently and survives a throwing channel", async () => {

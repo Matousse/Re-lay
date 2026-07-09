@@ -14,10 +14,12 @@ export async function postToSlack(
 ): Promise<boolean> {
   if (!webhookUrl) return false;
 
+  // The assigned owner gets a real @-mention so the play lands on someone.
+  const mention = message.audience?.slackMemberId ? `<@${message.audience.slackMemberId}> ` : "";
   const payload = {
-    text: message.headline, // fallback for notifications and unfurls
+    text: `${mention}${message.headline}`, // fallback for notifications and unfurls
     blocks: [
-      { type: "section", text: { type: "mrkdwn", text: message.headline } },
+      { type: "section", text: { type: "mrkdwn", text: `${mention}${message.headline}` } },
       {
         type: "section",
         fields: message.facts.map((fact) => ({

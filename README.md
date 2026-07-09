@@ -112,6 +112,13 @@ list → detail → decision screens.
   `/api/mcp` — point Claude at the live deploy and run the whole workflow in natural language.
   `run_reengagement` deliberately stops at the human-review gate; a calling agent proposes, a human
   approves.
+- **Conversational onboarding.** The missing first step, done by talking: the assistant reads the
+  company website (`read_website`), agrees on offering/ICP/stakes with the human and memorizes them
+  (`save_company_context` — the context then rides its system prompt), configures **Sillage** for
+  real (`configure_sillage_persona`, `create_signal_agent`, `watch_accounts` — live API writes,
+  always confirmed first), and assigns who receives the plays (`route_notifications` — Slack
+  @-mention + direct email). No settings maze; the setup _is_ a conversation, and every tool ships
+  on the MCP too.
 - **"Ask Re:lay" assistant.** A floating chat bubble on every screen: Claude wired to the exact
   same tool registry the MCP exposes. Ask "which deals are worth reviving?", run the agent, approve
   a play — in plain language. The route streams progress events, so every step the agent takes is
