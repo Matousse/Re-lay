@@ -1,103 +1,78 @@
 import axios, { type AxiosInstance } from "axios";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FakeSignalSource } from "@/integrations/signals/fake";
 import { makeSignalSource, SillageSignalSource } from "@/integrations/signals/sillage";
 
-// Fixtures mirror the shapes published in the Sillage OpenAPI spec
-// (api.getsillage.com/api/v1/docs/spec).
-const DETECTIONS = {
+// Fixtures mirror the real Sillage API v1 shape: GET /workspace/signals returns
+// each detection with its `signal` plus the `lead` and their `current_company`
+// embedded inline (offset-paginated via meta.pagination).
+const SIGNALS = {
   data: [
     {
-      id: 101,
-      signal_type: "newJob",
-      data: {
-        previous_position: { role: "Head of Marketing", company_name: "OldCo" },
-        new_position: { role: "CMO", company_name: "Acme", start_date: "2026-06-01" },
+      signal: {
+        id: "s1",
+        signal_type: "new_job",
+        signal_date: "2026-06-12T10:30:00.000Z",
+        detection_date: "2026-06-12T11:00:00.000Z",
+        data: {},
       },
-      signal_date: "2026-06-12T10:30:00.000Z",
-      lead_id: 7,
-      company_id: 42,
-      agent_id: 3,
-    },
-    {
-      id: 102,
-      signal_type: "keywordDetection",
-      data: { content_id: 555, author: null, keywords_found: ["levée de fonds", "Series B"] },
-      lead_id: null,
-      company_id: 43,
-    },
-    {
-      id: 103,
-      signal_type: "keywordDetection",
-      data: { content_id: 556, author: null, keywords_found: ["productivité"] },
-      lead_id: null,
-      company_id: 43,
-    },
-    {
-      id: 104,
-      signal_type: "jobPosting",
-      data: {
-        posting: { title: "Revenue Operations Manager", company_name: "Initech" },
-        job_title: null,
+      lead: {
+        first_name: "Lea",
+        last_name: "Blanc",
+        position: "CMO",
+        current_company: { name: "Acme" },
       },
-      lead_id: null,
-      company_id: null,
     },
     {
-      id: 105,
-      signal_type: "contentEngagement",
-      data: {},
-      lead_id: null,
-      company_id: 42,
+      signal: {
+        id: "s2",
+        signal_type: "keyword_detection",
+        data: { keywords_found: ["levée de fonds", "Series B"] },
+      },
+      lead: { current_company: { name: "Globex" } },
     },
-  ],
-  meta: { next_cursor: null, has_more: false },
-};
-
-const LEADS = {
-  data: [
     {
-      id: "7",
-      firstName: "Lea",
-      lastName: "Blanc",
-      position: "CMO",
-      company: { name: "Acme" },
-      email: null,
-      phoneNumber: null,
+      signal: {
+        id: "s3",
+        signal_type: "keyword_detection",
+        data: { keywords_found: ["productivité"] },
+      },
+      lead: { current_company: { name: "Globex" } },
+    },
+    {
+      signal: {
+        id: "s4",
+        signal_type: "job_posting_keyword_detection",
+        data: { keywords_found: ["AI"], posting: { title: "Revenue Operations Manager" } },
+      },
+      lead: {
+        first_name: "Sam",
+        last_name: "Nord",
+        position: "Talent",
+        current_company: { name: "Initech" },
+      },
+    },
+    {
+      signal: { id: "s5", signal_type: "linkedin_comment", data: {} },
+      lead: { current_company: { name: "Acme" } },
+    },
+    {
+      // No resolvable company → dropped, whatever the type.
+      signal: { id: "s6", signal_type: "new_job", data: {} },
+      lead: { first_name: "Nemo", last_name: "Void", current_company: null },
     },
   ],
-  meta: {},
+  meta: { pagination: { page: 1, pageSize: 100, pageCount: 1, total: 6 } },
 };
 
-const TOP_ACCOUNTS = {
-  data: [
-    { id: 42, name: "Acme", domain: "acme.com" },
-    { id: 43, name: "Globex", domain: "globex.com" },
-  ],
-  meta: { limit: 250 },
-};
-
-// Routes a request path onto the fixture the real API would return, mirroring
-// the previous fakeFetch() router.
-function payloadForPath(path: string) {
-  if (path.includes("/signals/query")) return DETECTIONS;
-  if (path.includes("/signals/101")) return { data: DETECTIONS.data[0] };
-  if (path.includes("/leads")) return LEADS;
-  if (path.includes("/top-accounts")) return TOP_ACCOUNTS;
-  return null;
-}
-
-// Stands in for the injected AxiosInstance: get/post resolve { data } the way
-// axios does, routing by URL exactly as the real endpoints would.
+// Stands in for the injected AxiosInstance: get resolves { data } the way axios
+// does, routing by URL exactly as the real endpoint would.
 function fakeHttp() {
   const respond = async (url: string) => {
-    const payload = payloadForPath(url);
-    if (!payload) throw new Error(`Sillage API ${url} responded 404`);
-    return { data: payload };
+    if (url.includes("/v1/workspace/signals")) return { data: SIGNALS };
+    throw new Error(`Sillage API ${url} responded 404`);
   };
   return {
     get: vi.fn((url: string) => respond(url)),
-    post: vi.fn((url: string) => respond(url)),
     interceptors: { response: { use: vi.fn() } },
   } as unknown as AxiosInstance;
 }
@@ -107,13 +82,13 @@ afterEach(() => {
 });
 
 describe("SillageSignalSource", () => {
-  it("maps newJob detections with lead and company resolution", async () => {
+  it("maps new_job detections from the embedded lead and company", async () => {
     const source = new SillageSignalSource("demo-key-ok", fakeHttp());
     const signals = await source.list();
 
-    const newJob = signals.find((s) => s.id === "slg-101");
+    const newJob = signals.find((s) => s.id === "slg-s1");
     expect(newJob).toEqual({
-      id: "slg-101",
+      id: "slg-s1",
       company: "Acme",
       type: "new_decision_maker",
       detail: "Lea Blanc arrive comme CMO chez Acme",
@@ -126,30 +101,31 @@ describe("SillageSignalSource", () => {
     const source = new SillageSignalSource("demo-key-ok", fakeHttp());
     const signals = await source.list();
 
-    const funding = signals.find((s) => s.id === "slg-102");
+    const funding = signals.find((s) => s.id === "slg-s2");
     expect(funding?.type).toBe("funding");
     expect(funding?.company).toBe("Globex");
-    expect(signals.find((s) => s.id === "slg-103")).toBeUndefined();
+    expect(signals.find((s) => s.id === "slg-s3")).toBeUndefined();
   });
 
-  it("maps job postings using the payload company and skips unknown types", async () => {
+  it("maps job postings and skips types (or leads) Re:lay cannot act on", async () => {
     const source = new SillageSignalSource("demo-key-ok", fakeHttp());
     const signals = await source.list();
 
-    const posting = signals.find((s) => s.id === "slg-104");
+    const posting = signals.find((s) => s.id === "slg-s4");
     expect(posting?.type).toBe("job_posting");
     expect(posting?.company).toBe("Initech");
     expect(posting?.detail).toContain("Revenue Operations Manager");
-    // contentEngagement is not something Re:lay knows how to act on.
-    expect(signals.find((s) => s.id === "slg-105")).toBeUndefined();
+    // linkedin_comment is not actionable; s6 has no company.
+    expect(signals.find((s) => s.id === "slg-s5")).toBeUndefined();
+    expect(signals.find((s) => s.id === "slg-s6")).toBeUndefined();
     expect(signals).toHaveLength(3);
   });
 
   it("fetches a single detection by prefixed id", async () => {
     const source = new SillageSignalSource("demo-key-ok", fakeHttp());
-    const signal = await source.getById("slg-101");
+    const signal = await source.getById("slg-s1");
     expect(signal?.company).toBe("Acme");
-    expect(await source.getById("sig_1")).toBeNull();
+    expect(await source.getById("s1")).toBeNull();
   });
 
   it("builds the axios instance with the bearer key and the real host", () => {
@@ -185,8 +161,12 @@ describe("SillageSignalSource", () => {
 });
 
 describe("makeSignalSource", () => {
-  it("returns the real source when a key is provided, the fake otherwise", () => {
+  it("returns the real source with a key, an empty offline source without", async () => {
     expect(makeSignalSource("demo-key-ok")).toBeInstanceOf(SillageSignalSource);
-    expect(makeSignalSource(undefined)).toBeInstanceOf(FakeSignalSource);
+
+    const offline = makeSignalSource(undefined);
+    expect(offline).not.toBeInstanceOf(SillageSignalSource);
+    expect(await offline.list()).toEqual([]);
+    expect(await offline.getById("slg-anything")).toBeNull();
   });
 });

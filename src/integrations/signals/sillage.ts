@@ -1,67 +1,66 @@
 import axios, { type AxiosInstance } from "axios";
 import { z } from "zod";
-import { FakeSignalSource } from "@/integrations/signals/fake";
 import type { SignalSource } from "@/integrations/signals/port";
 import { env } from "@/lib/env";
 import { SignalSchema, type Signal } from "@/types/pipeline";
 
-// Real SignalSource backed by the Sillage public API
-// (https://www.getsillage.com/docs/api). Response schemas below mirror the
-// published OpenAPI spec (api.getsillage.com/api/v1/docs/spec) but only
-// declare the fields we consume, so additive API changes never break us.
+// Real SignalSource backed by the Sillage public API v1
+// (https://api.getsillage.com/api/v1/docs). The v1 detection feed is
+// person-centric: GET /workspace/signals returns each detection with its
+// `signal`, and the `lead` (person) and their `current_company` embedded — so
+// names resolve inline, no follow-up lookups. Every schema below declares only
+// the fields we consume, so additive API changes never break us.
 //
-// Detections are translated onto the pipeline's Signal type:
-//   newJob / recentlyPromoted        → new_decision_maker
-//   jobPosting* (open role)          → job_posting
-//   keywordDetection (funding words) → funding
+// v1 signal types are snake_case. They map onto the pipeline's Signal type:
+//   new_job / recently_promoted            → new_decision_maker
+//   job_posting* (open role)               → job_posting
+//   keyword_detection (funding words)      → funding
 // Anything else is skipped: Re:lay only revives deals on events it can
 // argue about.
 
 const BASE_URL = "https://api.getsillage.com";
 
-const DetectionSchema = z.object({
-  id: z.number(),
-  signal_type: z.string().nullish(),
-  data: z.unknown().nullish(),
-  signal_date: z.string().nullish(),
-  lead_id: z.number().nullish(),
-  company_id: z.number().nullish(),
-});
-const DetectionListSchema = z.object({ data: z.array(DetectionSchema) });
-const DetectionItemSchema = z.object({ data: DetectionSchema });
+// v1 paginates by offset; we walk pages but stop at a sane ceiling so a busy
+// workspace can never balloon a single list() call.
+const PAGE_SIZE = 100;
+const MAX_SIGNALS = 500;
 
-const PositionSchema = z
-  .object({ role: z.string().nullish(), company_name: z.string().nullish() })
+const SIGNAL_ID_PREFIX = "slg-";
+
+const LeadSchema = z
+  .object({
+    first_name: z.string().nullish(),
+    last_name: z.string().nullish(),
+    position: z.string().nullish(),
+    current_company: z.object({ name: z.string().nullish() }).nullish(),
+  })
   .nullish();
-const JobUpdateDataSchema = z.object({
-  previous_position: PositionSchema,
-  new_position: PositionSchema,
+type Lead = z.infer<typeof LeadSchema>;
+
+const SignalItemSchema = z.object({
+  signal: z.object({
+    id: z.string(),
+    signal_type: z.string().nullish(),
+    signal_date: z.string().nullish(),
+    detection_date: z.string().nullish(),
+    data: z.unknown().nullish(),
+  }),
+  lead: LeadSchema,
 });
+type SignalItem = z.infer<typeof SignalItemSchema>;
+
+const SignalPageSchema = z.object({
+  data: z.array(SignalItemSchema),
+  meta: z.object({ pagination: z.object({ pageCount: z.number() }).nullish() }).nullish(),
+});
+
 const JobPostingDataSchema = z.object({
-  posting: z.object({ title: z.string().nullish(), company_name: z.string().nullish() }).nullish(),
+  posting: z.object({ title: z.string().nullish() }).nullish(),
   job_title: z.string().nullish(),
 });
 const KeywordDataSchema = z.object({ keywords_found: z.array(z.string()).nullish() });
 
-// v1 leads carry string ids; v2 detections reference them via numeric
-// lead_id — index by stringified id and match both ways.
-const LeadSchema = z.object({
-  id: z.union([z.string(), z.number()]),
-  firstName: z.string().nullish(),
-  lastName: z.string().nullish(),
-  position: z.string().nullish(),
-  company: z.object({ name: z.string().nullish() }).nullish(),
-});
-const LeadListSchema = z.object({ data: z.array(LeadSchema) });
-
-const TopAccountSchema = z.object({ id: z.number(), name: z.string().nullish() });
-const TopAccountListSchema = z.object({ data: z.array(TopAccountSchema) });
-
-type Lead = z.infer<typeof LeadSchema>;
-
 const FUNDING_PATTERN = /lev[éè]e?|fundrais|raised|series [a-e]\b|seed|financement/i;
-
-const SIGNAL_ID_PREFIX = "slg-";
 
 export class SillageSignalSource implements SignalSource {
   private http: AxiosInstance;
@@ -91,98 +90,74 @@ export class SillageSignalSource implements SignalSource {
   }
 
   async list(): Promise<Signal[]> {
-    const [detections, leads, companies] = await Promise.all([
-      this.fetchDetections(),
-      this.fetchLeadIndex(),
-      this.fetchCompanyIndex(),
-    ]);
-    return detections
-      .map((detection) => mapDetection(detection, leads, companies))
-      .filter((signal): signal is Signal => signal !== null);
+    const items = await this.fetchSignals();
+    return items.map(mapSignalItem).filter((signal): signal is Signal => signal !== null);
   }
 
+  // v1 has no single-detection endpoint, so we resolve one id against the feed.
   async getById(id: string): Promise<Signal | null> {
     if (!id.startsWith(SIGNAL_ID_PREFIX)) return null;
-    const detectionId = Number(id.slice(SIGNAL_ID_PREFIX.length));
-    if (!Number.isInteger(detectionId)) return null;
-
-    const [payload, leads, companies] = await Promise.all([
-      this.http.get(`/v2/workspace/signals/${detectionId}`).then((r) => r.data),
-      this.fetchLeadIndex(),
-      this.fetchCompanyIndex(),
-    ]);
-    return mapDetection(DetectionItemSchema.parse(payload).data, leads, companies);
+    const signals = await this.list();
+    return signals.find((signal) => signal.id === id) ?? null;
   }
 
-  private async fetchDetections() {
-    const { data } = await this.http.post("/v2/workspace/signals/query", { limit: 50 });
-    return DetectionListSchema.parse(data).data;
-  }
-
-  private async fetchLeadIndex(): Promise<Map<string, Lead>> {
-    const { data } = await this.http.get("/v1/workspace/leads?pageSize=100");
-    const leads = LeadListSchema.parse(data).data;
-    return new Map(leads.map((lead) => [String(lead.id), lead]));
-  }
-
-  private async fetchCompanyIndex(): Promise<Map<number, string>> {
-    const { data } = await this.http.get("/v2/top-accounts?limit=250");
-    const accounts = TopAccountListSchema.parse(data).data;
-    return new Map(
-      accounts.filter((a) => a.name).map((account) => [account.id, account.name as string]),
-    );
+  private async fetchSignals(): Promise<SignalItem[]> {
+    const items: SignalItem[] = [];
+    let page = 1;
+    let pageCount = 1;
+    do {
+      const { data } = await this.http.get("/v1/workspace/signals", {
+        params: { page, pageSize: PAGE_SIZE },
+      });
+      const parsed = SignalPageSchema.parse(data);
+      items.push(...parsed.data);
+      pageCount = parsed.meta?.pagination?.pageCount ?? page;
+      page += 1;
+    } while (page <= pageCount && items.length < MAX_SIGNALS);
+    return items;
   }
 }
 
-function mapDetection(
-  detection: z.infer<typeof DetectionSchema>,
-  leads: Map<string, Lead>,
-  companies: Map<number, string>,
-): Signal | null {
-  const lead = detection.lead_id != null ? leads.get(String(detection.lead_id)) : undefined;
-  const base = {
-    id: `${SIGNAL_ID_PREFIX}${detection.id}`,
-    company:
-      (detection.company_id != null ? companies.get(detection.company_id) : undefined) ??
-      lead?.company?.name ??
-      companyFromPayload(detection),
-  };
-  if (!base.company) return null;
+function mapSignalItem({ signal, lead }: SignalItem): Signal | null {
+  const company = lead?.current_company?.name;
+  if (!company) return null;
 
-  switch (detection.signal_type) {
-    case "newJob":
-    case "recentlyPromoted": {
-      const data = JobUpdateDataSchema.safeParse(detection.data);
-      const role = (data.success ? data.data.new_position?.role : null) ?? lead?.position ?? null;
-      const personName = [lead?.firstName, lead?.lastName].filter(Boolean).join(" ") || undefined;
+  const base = { id: `${SIGNAL_ID_PREFIX}${signal.id}`, company };
+
+  switch (signal.signal_type) {
+    case "new_job":
+    case "recently_promoted": {
+      const personName = [lead?.first_name, lead?.last_name].filter(Boolean).join(" ") || undefined;
+      const role = lead?.position ?? undefined;
       return SignalSchema.parse({
         ...base,
         type: "new_decision_maker",
-        detail: `${personName ?? "Un nouveau décideur"} arrive comme ${role ?? "décideur"} chez ${base.company}`,
+        detail: `${personName ?? "Un nouveau décideur"} arrive comme ${role ?? "décideur"} chez ${company}`,
         personName,
-        personRole: role ?? undefined,
+        personRole: role,
       });
     }
-    case "jobPosting":
-    case "jobPostingInsight":
-    case "jobPostingHiringManager": {
-      const data = JobPostingDataSchema.safeParse(detection.data);
+    case "job_posting":
+    case "job_posting_insight":
+    case "job_posting_hiring_manager":
+    case "job_posting_keyword_detection": {
+      const data = JobPostingDataSchema.safeParse(signal.data);
       const title =
         (data.success ? (data.data.posting?.title ?? data.data.job_title) : null) ?? "un poste clé";
       return SignalSchema.parse({
         ...base,
         type: "job_posting",
-        detail: `${base.company} recrute : ${title}`,
+        detail: `${company} recrute : ${title}`,
       });
     }
-    case "keywordDetection": {
-      const data = KeywordDataSchema.safeParse(detection.data);
+    case "keyword_detection": {
+      const data = KeywordDataSchema.safeParse(signal.data);
       const keywords = (data.success ? data.data.keywords_found : null) ?? [];
       if (!keywords.some((keyword) => FUNDING_PATTERN.test(keyword))) return null;
       return SignalSchema.parse({
         ...base,
         type: "funding",
-        detail: `${base.company} — signal de levée détecté (${keywords.join(", ")})`,
+        detail: `${company} — signal de levée détecté (${keywords.join(", ")})`,
       });
     }
     default:
@@ -190,20 +165,17 @@ function mapDetection(
   }
 }
 
-function companyFromPayload(detection: z.infer<typeof DetectionSchema>): string | null {
-  const jobUpdate = JobUpdateDataSchema.safeParse(detection.data);
-  if (jobUpdate.success && jobUpdate.data.new_position?.company_name) {
-    return jobUpdate.data.new_position.company_name;
-  }
-  const jobPosting = JobPostingDataSchema.safeParse(detection.data);
-  if (jobPosting.success && jobPosting.data.posting?.company_name) {
-    return jobPosting.data.posting.company_name;
-  }
-  return null;
-}
+// With no key the workspace is simply unavailable — the app surfaces no
+// signals rather than any seeded stand-in. Real signals require SILLAGE_API_KEY.
+const OFFLINE_SOURCE: SignalSource = {
+  async list() {
+    return [];
+  },
+  async getById() {
+    return null;
+  },
+};
 
-// The demo's default: real Sillage workspace when a key is configured,
-// seeded fake otherwise — same contract either way.
 export function makeSignalSource(apiKey: string | undefined = env.SILLAGE_API_KEY): SignalSource {
-  return apiKey ? new SillageSignalSource(apiKey) : new FakeSignalSource();
+  return apiKey ? new SillageSignalSource(apiKey) : OFFLINE_SOURCE;
 }

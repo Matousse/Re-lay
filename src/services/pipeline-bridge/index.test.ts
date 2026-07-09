@@ -2,15 +2,39 @@ import { describe, expect, it } from "vitest";
 import { FakeCrm } from "@/integrations/crm/fake";
 import { FakeEnrichment } from "@/integrations/enrichment/fake";
 import { FakeLlm } from "@/integrations/llm/fake";
-import { FakeSignalSource } from "@/integrations/signals/fake";
+import type { SignalSource } from "@/integrations/signals/port";
+import type { Signal } from "@/types/pipeline";
 import { PipelineBridge } from "./index";
 
 const NOW = new Date("2026-07-07T12:00:00Z");
 
+// A local stub, not a shipped fake: sig_1 targets Acme (a lost account → runs
+// to humanReview), sig_2 targets Globex (active → the graph ends early).
+const STUB_SIGNALS: Signal[] = [
+  {
+    id: "sig_1",
+    company: "Acme",
+    type: "new_decision_maker",
+    detail: "Lea Blanc nommée CMO chez Acme",
+    personName: "Lea Blanc",
+    personRole: "CMO",
+  },
+  { id: "sig_2", company: "Globex", type: "funding", detail: "Globex lève 10M€" },
+];
+
+const stubSignals: SignalSource = {
+  async list() {
+    return STUB_SIGNALS;
+  },
+  async getById(id) {
+    return STUB_SIGNALS.find((signal) => signal.id === id) ?? null;
+  },
+};
+
 function makeBridge() {
   const crm = new FakeCrm();
   const bridge = new PipelineBridge(
-    { crm, enrichment: new FakeEnrichment(), llm: new FakeLlm(), signals: new FakeSignalSource() },
+    { crm, enrichment: new FakeEnrichment(), llm: new FakeLlm(), signals: stubSignals },
     () => NOW,
   );
   return { bridge, crm };
