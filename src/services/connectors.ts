@@ -1,5 +1,4 @@
 import { fetchConnectorStates, persistConnection } from "@/integrations/connectors";
-import { getNotificationRouting } from "@/integrations/notifications/routing";
 import { env } from "@/lib/env";
 import { CONNECTOR_NAMES, type ConnectorId, type ConnectorStates } from "@/types/connectors";
 
@@ -24,8 +23,10 @@ export async function missingConnectors(): Promise<{ id: ConnectorId; name: stri
     .map((id) => ({ id, name: CONNECTOR_NAMES[id] }));
 }
 
-// The platform pieces around the core stack — status derives from the env
-// (real keys, no demo connect flow) plus the assigned notification routing.
+// The platform pieces around the core stack. Anthropic is live from its env key;
+// Slack, Resend, Gamma and Gradium are presented as roadmap ("coming soon"). The
+// notification plumbing (Slack/email dispatch) exists and stays wired — it just
+// ships once those channels are set up, so we don't advertise them as live yet.
 export type PlatformIntegration = {
   id: "anthropic" | "slack" | "resend" | "gamma" | "gradium";
   status: "connected" | "missing" | "soon";
@@ -34,8 +35,6 @@ export type PlatformIntegration = {
 };
 
 export function platformIntegrations(): PlatformIntegration[] {
-  const routing = getNotificationRouting();
-  const emailRecipient = routing?.email ?? env.NOTIFY_EMAIL_TO;
   return [
     {
       id: "anthropic",
@@ -45,19 +44,15 @@ export function platformIntegrations(): PlatformIntegration[] {
     },
     {
       id: "slack",
-      status: env.SLACK_WEBHOOK_URL ? "connected" : "missing",
-      detail: routing?.slackMemberId
-        ? `Plays announced with an @-mention for ${routing.name}`
-        : "Plays announced to the channel — assign an owner via the assistant",
-      hint: "Set SLACK_WEBHOOK_URL in .env",
+      status: "soon",
+      detail: "",
+      hint: "On the roadmap — approved plays announced to your channel, @-mentioning the assigned owner.",
     },
     {
       id: "resend",
-      status: env.RESEND_API_KEY && emailRecipient ? "connected" : "missing",
-      detail: emailRecipient
-        ? `Plays emailed to ${emailRecipient}`
-        : "Plays emailed to the assigned owner",
-      hint: "Set RESEND_API_KEY and NOTIFY_EMAIL_TO in .env",
+      status: "soon",
+      detail: "",
+      hint: "On the roadmap — the same plays emailed to the deal owner, so a play never dies unseen in a channel.",
     },
     {
       id: "gamma",

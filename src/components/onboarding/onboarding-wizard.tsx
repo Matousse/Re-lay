@@ -326,7 +326,8 @@ export function OnboardingWizard({ initialStatus }: { initialStatus: OnboardingS
           <div key="s2" className="animate-in fade-in slide-in-from-bottom-2 duration-300">
             <h2 className="text-lg font-semibold">Who owns the plays?</h2>
             <p className="text-muted-foreground mt-1 mb-6 text-sm">
-              They get @-mentioned on Slack and emailed when a deal wakes up or a play ships.
+              They&rsquo;re the owner of every play. Slack @-mentions and email alerts are coming
+              soon — set the details now and they&rsquo;ll fire once those channels go live.
             </p>
             <div className="max-w-md space-y-3">
               <Input
