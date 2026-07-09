@@ -10,6 +10,9 @@ const envSchema = z.object({
   // Slack incoming-webhook URL. Set it and every approval posts to the channel;
   // unset, the approval flow just skips the notification.
   SLACK_WEBHOOK_URL: z.url().optional(),
+  // Model override for the chat assistant (defaults to Haiku for speed —
+  // the deep reasoning lives in the pipeline, which keeps Sonnet).
+  ASSISTANT_MODEL: z.string().min(1).optional(),
   // Resend outbound email — the email channel needs both the key and a
   // recipient; with either missing it's a no-op, same gating as Slack.
   RESEND_API_KEY: z.string().min(1).optional(),
@@ -21,6 +24,7 @@ export const env = envSchema.parse({
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   SILLAGE_API_KEY: process.env.SILLAGE_API_KEY,
   SLACK_WEBHOOK_URL: process.env.SLACK_WEBHOOK_URL,
+  ASSISTANT_MODEL: process.env.ASSISTANT_MODEL,
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   RESEND_FROM: process.env.RESEND_FROM,
   NOTIFY_EMAIL_TO: process.env.NOTIFY_EMAIL_TO,

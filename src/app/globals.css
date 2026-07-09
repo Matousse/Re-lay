@@ -163,3 +163,23 @@
     stroke-dasharray: none;
   }
 }
+
+/* Idle life for the assistant launcher: a slow bob + a breathing halo. */
+@keyframes relay-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+.animate-relay-float {
+  animation: relay-float 4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-relay-float {
+    animation: none;
+  }
+}

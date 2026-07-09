@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AssistantBubble } from "@/components/assistant/assistant-bubble";
 import { ProfileMenu } from "@/components/profile-menu";
 import { SiteNav } from "@/components/site-nav";
 import { SESSION_COOKIE } from "@/lib/session";
@@ -41,6 +42,7 @@ export default async function AppLayout({
         </div>
       </header>
       {children}
+      <AssistantBubble />
     </>
   );
 }
