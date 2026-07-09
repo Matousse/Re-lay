@@ -132,10 +132,11 @@ export const DecisionInputSchema = z.object({
 });
 
 // What Re:lay did as a side effect of a decision — surfaced to the rep as the
-// sync receipt and Slack toast.
+// sync receipt and notification toasts.
 export type DecisionEffects = {
   crmSynced: boolean;
   slackNotified: boolean;
+  emailNotified: boolean;
   syncedAt: string;
 };
 

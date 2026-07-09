@@ -1,47 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ReengagementCase } from "@/types/reengagement";
-import { notifyPlayApproved } from "./slack";
+import type { ChannelMessage } from "@/types/notifications";
+import { postToSlack } from "./slack";
 
-const CASE = {
-  id: "case-oberon",
-  deal: {
-    id: "opp-1",
-    company: { name: "Oberon Systems", domain: "oberon-systems.com", industry: "Cybersecurity" },
-    amount: 120_000,
-    currency: "EUR",
-    lostAt: "2025-10-16",
-    lossReason: "competitor",
-    lossNotes: "…",
-    previousContact: { name: "Hugo Steiner", role: "Head of Sales Ops" },
-  },
-  signal: {
-    id: "sig-1",
-    type: "job_change",
-    title: "…",
-    description: "…",
-    detectedAt: "2026-07-07",
-    source: "Sillage",
-  },
-  autopsy: { summary: "…", lossFactors: [] },
-  verdict: { decision: "go", score: 88, reasoning: "…", factors: {} },
-  plan: {
-    targetContact: {
-      name: "Maxime Aubert",
-      role: "VP Sales Operations",
-      email: "m.aubert@oberon-systems.com",
-      enrichment: { providersTried: 2 },
-    },
-    angle: "…",
-    talkingPoints: [],
-    emailDraft: { subject: "…", body: "…" },
-  },
-  status: "approved",
-} as unknown as ReengagementCase;
+const MESSAGE: ChannelMessage = {
+  headline: "🔥 Play approved — Oberon Systems (88/100)",
+  facts: [
+    { label: "Company", value: "Oberon Systems · €120,000 recovered" },
+    { label: "Angle", value: "Champion re-activation" },
+  ],
+  footer: "Re:lay drafted the outreach to m.aubert@oberon-systems.com",
+};
 
-describe("notifyPlayApproved", () => {
+describe("postToSlack", () => {
   it("does nothing and reports not-notified when no webhook is configured", async () => {
     const fetchImpl = vi.fn();
-    const notified = await notifyPlayApproved(CASE, "Champion re-activation", {
+    const notified = await postToSlack(MESSAGE, {
       webhookUrl: undefined,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
@@ -53,7 +26,7 @@ describe("notifyPlayApproved", () => {
     const fetchImpl = vi.fn(
       async (_url: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 200 }),
     );
-    const notified = await notifyPlayApproved(CASE, "Champion re-activation", {
+    const notified = await postToSlack(MESSAGE, {
       webhookUrl: "https://hooks.slack.com/services/T/B/X",
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
@@ -64,14 +37,16 @@ describe("notifyPlayApproved", () => {
     const body = JSON.parse(init!.body as string);
     expect(body.text).toContain("Oberon Systems");
     expect(body.text).toContain("88/100");
-    expect(JSON.stringify(body.blocks)).toContain("Champion re-activation");
-    expect(JSON.stringify(body.blocks)).toContain("Maxime Aubert");
+    const blocks = JSON.stringify(body.blocks);
+    expect(blocks).toContain("*Angle:*");
+    expect(blocks).toContain("Champion re-activation");
+    expect(blocks).toContain("m.aubert@oberon-systems.com");
   });
 
   it("reports failure on a non-2xx webhook response", async () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 500 }));
     expect(
-      await notifyPlayApproved(CASE, undefined, {
+      await postToSlack(MESSAGE, {
         webhookUrl: "https://hooks.slack.com/services/T/B/X",
         fetchImpl: fetchImpl as unknown as typeof fetch,
       }),
@@ -83,7 +58,7 @@ describe("notifyPlayApproved", () => {
       throw new Error("network down");
     });
     expect(
-      await notifyPlayApproved(CASE, undefined, {
+      await postToSlack(MESSAGE, {
         webhookUrl: "https://hooks.slack.com/services/T/B/X",
         fetchImpl: fetchImpl as unknown as typeof fetch,
       }),

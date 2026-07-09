@@ -120,7 +120,11 @@ export function DecisionPanel({
   // Optimistic: flip the UI as soon as the rep clicks, server state catches up
   // via router.refresh().
   const [localStatus, setLocalStatus] = useState<CaseStatus | null>(null);
-  const [receipt, setReceipt] = useState<{ syncedAt: string; slackNotified: boolean } | null>(null);
+  const [receipt, setReceipt] = useState<{
+    syncedAt: string;
+    slackNotified: boolean;
+    emailNotified: boolean;
+  } | null>(null);
 
   const decision = useMutation({
     mutationFn: (input: DecisionInput) => postDecision(caseId, input),
@@ -130,9 +134,14 @@ export function DecisionPanel({
     },
     onSuccess: (data, input) => {
       if (input.action === "approve") {
-        setReceipt({ syncedAt: data.effects.syncedAt, slackNotified: data.effects.slackNotified });
+        setReceipt({
+          syncedAt: data.effects.syncedAt,
+          slackNotified: data.effects.slackNotified,
+          emailNotified: data.effects.emailNotified,
+        });
         toast.success("Approved — contact and note synced to HubSpot.");
         if (data.effects.slackNotified) toast("Posted to #sales-signals.");
+        if (data.effects.emailNotified) toast("Deal owner notified by email.");
       } else {
         toast("Rejected — signal archived, no outreach sent.");
       }
@@ -280,6 +289,7 @@ export function DecisionPanel({
             opportunityId={opportunityId}
             syncedAt={receipt?.syncedAt}
             slackNotified={receipt?.slackNotified}
+            emailNotified={receipt?.emailNotified}
           />
         )}
         <DraftView

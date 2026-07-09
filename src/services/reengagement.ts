@@ -6,7 +6,7 @@ import {
   persistDecision,
   resetDemo,
 } from "@/integrations/pipeline";
-import { notifyPlayApproved } from "@/integrations/notifications/slack";
+import { dispatchEvent } from "@/services/notifications";
 import { getPipelineBridge } from "@/services/pipeline-bridge";
 import type { DecisionEffects, DecisionInput, ReengagementCase } from "@/types/reengagement";
 
@@ -67,7 +67,9 @@ export async function getStats(): Promise<PipelineStats> {
 
 export async function simulateIncomingSignal(): Promise<ReengagementCase | null> {
   if (!(await pipelineOnline())) return null;
-  return activateSimulatedCase();
+  const simulated = await activateSimulatedCase();
+  if (simulated) await dispatchEvent({ type: "review_requested", case: simulated });
+  return simulated;
 }
 
 export type PipelineRunResult =
@@ -80,6 +82,7 @@ export async function runPipelineForSignal(signalId: string): Promise<PipelineRu
   if (!(await pipelineOnline())) return { ok: false, reason: "offline" };
   const reengagementCase = await getPipelineBridge().runSignal(signalId);
   if (!reengagementCase) return { ok: false, reason: "not_eligible" };
+  await dispatchEvent({ type: "review_requested", case: reengagementCase });
   return { ok: true, case: reengagementCase };
 }
 
@@ -101,12 +104,16 @@ export async function decideCase(
   if (!updated) return null;
 
   // Approving a play triggers the downstream actions: the CRM sync (the
-  // graph's syncCrm node for real runs, described for curated cases) and a
-  // Slack announcement when a webhook is configured.
+  // graph's syncCrm node for real runs, described for curated cases) and the
+  // team announcement on every configured channel.
   const approved = input.action === "approve";
+  const notified = approved
+    ? await dispatchEvent({ type: "play_approved", case: updated, angleLabel: input.angleLabel })
+    : { slack: false, email: false };
   const effects: DecisionEffects = {
     crmSynced: approved,
-    slackNotified: approved ? await notifyPlayApproved(updated, input.angleLabel) : false,
+    slackNotified: notified.slack,
+    emailNotified: notified.email,
     syncedAt: new Date().toISOString(),
   };
   return { case: updated, effects };

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Check, Hash } from "lucide-react";
+import { Check, Hash, Mail } from "lucide-react";
 import { AnimatedCheck } from "@/components/animated-check";
 import { CONNECTOR_LOGOS } from "@/lib/logos";
 
@@ -13,8 +13,8 @@ function formatTime(iso: string): string | null {
 
 /**
  * The receipt shown once a play is approved: the concrete actions Re:lay ran
- * downstream — the CRM write-back (the graph's syncCrm node) and, when a Slack
- * webhook is wired, the channel announcement.
+ * downstream — the CRM write-back (the graph's syncCrm node) and, per
+ * configured channel, the team announcement (Slack, email).
  */
 export function SyncReceipt({
   companyName,
@@ -22,12 +22,14 @@ export function SyncReceipt({
   opportunityId,
   syncedAt,
   slackNotified = false,
+  emailNotified = false,
 }: {
   companyName: string;
   contactName: string;
   opportunityId: string;
   syncedAt?: string;
   slackNotified?: boolean;
+  emailNotified?: boolean;
 }) {
   const time = syncedAt ? formatTime(syncedAt) : null;
 
@@ -74,6 +76,20 @@ export function SyncReceipt({
               <span className="text-foreground inline-flex items-center font-medium">
                 <Hash aria-hidden className="size-3" />
                 sales-signals
+              </span>
+            </span>
+          </li>
+        )}
+        {emailNotified && (
+          <li className="flex items-center gap-2">
+            <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-emerald-600/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400">
+              <AnimatedCheck className="size-2.5" />
+            </span>
+            <span className="text-muted-foreground inline-flex items-center gap-1">
+              Deal owner notified
+              <span className="text-foreground inline-flex items-center gap-0.5 font-medium">
+                <Mail aria-hidden className="size-3" />
+                by email
               </span>
             </span>
           </li>

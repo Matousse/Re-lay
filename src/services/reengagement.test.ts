@@ -61,14 +61,16 @@ describe("decideCase", () => {
     expect(outcome?.case.editedEmail).toBeUndefined();
   });
 
-  it("reports CRM sync on approve and skips it (plus Slack) on reject", async () => {
+  it("reports CRM sync on approve and skips it (plus notifications) on reject", async () => {
     const approved = await decideCase("case-altiflow", { action: "approve" });
     expect(approved?.effects.crmSynced).toBe(true);
-    // No SLACK_WEBHOOK_URL in tests, so nothing is posted.
+    // No SLACK_WEBHOOK_URL / RESEND_API_KEY in tests, so nothing is sent.
     expect(approved?.effects.slackNotified).toBe(false);
+    expect(approved?.effects.emailNotified).toBe(false);
     const rejected = await decideCase("case-wattly", { action: "reject" });
     expect(rejected?.effects.crmSynced).toBe(false);
     expect(rejected?.effects.slackNotified).toBe(false);
+    expect(rejected?.effects.emailNotified).toBe(false);
   });
 
   it("refuses to decide a case twice", async () => {
