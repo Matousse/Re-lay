@@ -101,9 +101,10 @@ list → detail → decision screens.
 - **CRM sync receipt.** On approval, a "Synced to HubSpot" card shows the write-back happening —
   contact upserted, note logged, deal stage → _Re-engaged_ — with a timestamp. Makes the agent's
   output tangible instead of a black box.
-- **Live Slack announcement.** Approved plays post a Block Kit message to a channel via an
-  outgoing webhook (the brief's "live webhooks"). Env-gated: no webhook configured → honest no-op;
-  a down webhook never breaks an approval.
+- **Live notifications — Slack + email.** Domain events (`play_approved`, `review_requested`) fan
+  out through a dispatcher to a Slack webhook (Block Kit — the brief's "live webhooks") and email
+  (Resend). Each channel is env-gated and fail-safe: unconfigured → honest no-op; a down channel
+  never breaks the pipeline action.
 - **Recoverable-revenue projection.** The dashboard turns revivable pipeline into the number a CRO
   actually tracks — recovered revenue at a draggable win-back rate (5–40%). CRO's exact language.
 - **MCP server.** Re:lay is itself a tool other agents can drive: 7 MCP tools

@@ -9,7 +9,7 @@ drive over MCP) and **conversational** (a bot you can talk to) — not just a UI
 > **Hackathon day — keys in hand.** The organizers provide API keys for every sponsor tool
 > (Sillage, FullEnrich, Anthropic, Gamma). The plan flips from _fake-first_ to **real-first**: we
 > run the real adapters and keep the fakes as a demo safety net (flaky venue wifi, rate limits,
-> spent credits). It also unblocks the Anthropic LLM swap — only Mat's go is left.
+> spent credits). It also unblocked the Anthropic LLM swap — done, the agent runs on Claude.
 
 ---
 
@@ -28,6 +28,10 @@ drive over MCP) and **conversational** (a bot you can talk to) — not just a UI
   wrappers over `services/`: `connect_integrations`, `list_signals`, `list_revivable_deals`,
   `get_case`, `run_reengagement` (stops at human review), `approve_play`, `reject_play`. Verified
   end-to-end over JSON-RPC (run → pending case → approve → CRM/Slack effects).
+- **Notification dispatcher** (9 juil.) — `RelayEvent` (`play_approved`, `review_requested`) →
+  `dispatchEvent` renders one neutral message → fans out to **Slack** (Block Kit) + **email**
+  (Resend REST, zero deps, test sender by default). Env-gated per channel, fail-safe, surfaced in
+  the sync receipt + toasts (`emailNotified`).
 
 ---
 
@@ -270,13 +274,13 @@ for an Anthropic agentic hackathon — the Anthropic swap and the MCP server —
 
 | Order | Task                                                         | Owner  | Risk | Fallback if a key/API bites |
 | ----- | ------------------------------------------------------------ | ------ | ---- | --------------------------- |
-| 1     | LLM → Anthropic swap _(unblocked)_                           | Mat    | Low  | needs Mat's go              |
+| 1 ✅  | LLM → Anthropic swap                                         | Mat    | Low  | fake LLM                    |
 | 2 ✅  | **MCP server**: read tools (`mcp-handler`)                   | Darren | Low  | runs on fakes               |
-| 3     | Event dispatcher + re-route Slack through it                 | Darren | Low  | in-app preview              |
+| 3 ✅  | Event dispatcher + re-route Slack through it                 | Darren | Low  | in-app preview              |
 | 4 ✅  | MCP `run_reengagement` + `approve_play` (reuse `decideCase`) | Darren | Med  | runs on fakes               |
 | 5     | **Voice bubble Tier 1** — text chat on the Re:lay MCP tools  | Darren | Low  | runs on fakes               |
 | 6     | Gamma `ContentPort` + adapter + fake                         | Darren | Med  | instant fake link           |
-| 7     | Email channel (Resend)                                       | Darren | Low  | in-app preview              |
+| 7 ✅  | Email channel (Resend)                                       | Darren | Low  | in-app preview              |
 | 8     | Join: deck link rides `play_approved` (Slack + email)        | Darren | Med  | —                           |
 | 9     | **Voice bubble Tier 2/3** — Gradium STT/TTS (talk to it)     | Darren | Med  | falls back to text          |
 | 10    | Weekly `digest_ready` deck _(first to cut)_                  | Darren | Med  | —                           |
