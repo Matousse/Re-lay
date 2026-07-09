@@ -1,0 +1,29 @@
+[
+  {
+    "id": "acc_1",
+    "company": "Acme",
+    "status": "lost",
+    "lossReason": "budget",
+    "lostAt": "2024-03-10",
+    "notes": [
+      {
+        "date": "2024-02-12",
+        "author": "Sam",
+        "text": "Démo faite. Le CMO d'alors (Paul Roy) trouve l'outil trop cher vs la valeur perçue."
+      },
+      {
+        "date": "2024-03-10",
+        "author": "Sam",
+        "text": "Deal clos perdu : pas de budget validé côté marketing."
+      }
+    ]
+  },
+  {
+    "id": "acc_2",
+    "company": "Globex",
+    "status": "active",
+    "lossReason": null,
+    "lostAt": null,
+    "notes": [{ "date": "2024-06-01", "author": "Alex", "text": "En cours de négociation." }]
+  }
+]
