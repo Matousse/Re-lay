@@ -1,4 +1,5 @@
 import { sendEmail } from "@/integrations/notifications/email";
+import { getNotificationRouting } from "@/integrations/notifications/routing";
 import { postToSlack } from "@/integrations/notifications/slack";
 import { formatCurrency } from "@/lib/format";
 import type { ChannelMessage, NotificationResults, RelayEvent } from "@/types/notifications";
@@ -48,9 +49,17 @@ export async function dispatchEvent(
   channels: Partial<Channels> = {},
 ): Promise<NotificationResults> {
   const message = render(event);
+  // Assigned owner (route_notifications tool): @-mention on Slack, direct
+  // recipient on email. Falls back to the plain channel + NOTIFY_EMAIL_TO.
+  const routing = getNotificationRouting();
+  if (routing) {
+    message.audience = { name: routing.name, slackMemberId: routing.slackMemberId };
+  }
   const [slack, email] = await Promise.all([
     (channels.slack ?? postToSlack)(message).catch(() => false),
-    (channels.email ?? sendEmail)(message).catch(() => false),
+    (channels.email ?? sendEmail)(message, routing?.email ? { to: routing.email } : {}).catch(
+      () => false,
+    ),
   ]);
   return { slack, email };
 }
