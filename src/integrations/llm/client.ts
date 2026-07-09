@@ -7,10 +7,11 @@ export interface LlmClient {
 }
 
 export function makeAnthropicClient(): LlmClient {
+  // No `temperature`: the Claude 5 family rejects the param (API 400,
+  // "`temperature` is deprecated for this model").
   const model = new ChatAnthropic({
     model: "claude-sonnet-5",
     apiKey: env.ANTHROPIC_API_KEY,
-    temperature: 0.3,
   });
   return {
     async structured({ system, user, schema }) {

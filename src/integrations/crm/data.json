@@ -25,5 +25,24 @@
     "lossReason": null,
     "lostAt": null,
     "notes": [{ "date": "2024-06-01", "author": "Alex", "text": "En cours de négociation." }]
+  },
+  {
+    "id": "acc_3",
+    "company": "Qonto",
+    "status": "lost",
+    "lossReason": "timing",
+    "lostAt": "2025-11-20",
+    "notes": [
+      {
+        "date": "2025-10-02",
+        "author": "Sam",
+        "text": "POC concluant côté équipe finance, mais la roadmap risque/conformité est gelée jusqu'au staffing de l'équipe Risk."
+      },
+      {
+        "date": "2025-11-20",
+        "author": "Sam",
+        "text": "Deal clos perdu : « revenez quand l'équipe Risk sera en place, on n'a personne pour porter le sujet en interne »."
+      }
+    ]
   }
 ]

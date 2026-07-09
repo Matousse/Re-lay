@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 import { Command } from "@langchain/langgraph";
 import { FakeCrm } from "@/integrations/crm/fake";
 import { FakeEnrichment } from "@/integrations/enrichment/fake";
+import { makeAnthropicClient } from "@/integrations/llm/client";
 import { FakeLlm } from "@/integrations/llm/fake";
 import { makeSignalSource } from "@/integrations/signals/sillage";
+import { env } from "@/lib/env";
 import type { CrmPort } from "@/integrations/crm/port";
 import type { EnrichmentPort } from "@/integrations/enrichment/port";
 import type { LlmClient } from "@/integrations/llm/client";
@@ -19,7 +21,8 @@ import type { DecisionInput, ReengagementCase } from "@/types/reengagement";
 // pending_review case, and resume the exact same thread when the rep decides.
 // Builds its own graph instance so nothing here touches the pipeline
 // singleton in services/pipeline/index.ts (which requires ANTHROPIC_API_KEY at
-// import time) — the LLM is injected and defaults to the offline FakeLlm.
+// import time) — every dep is injected and gated on its key: real when the
+// key is present, offline fake otherwise.
 
 type BridgeDeps = {
   crm: CrmPort;
@@ -34,7 +37,8 @@ function defaultDeps(): BridgeDeps {
   return {
     crm: new FakeCrm(),
     enrichment: new FakeEnrichment(),
-    llm: new FakeLlm(),
+    // Real Claude when ANTHROPIC_API_KEY is set, deterministic fake otherwise.
+    llm: env.ANTHROPIC_API_KEY ? makeAnthropicClient() : new FakeLlm(),
     // Real Sillage workspace when SILLAGE_API_KEY is set, seeded fake
     // otherwise.
     signals: makeSignalSource(),
