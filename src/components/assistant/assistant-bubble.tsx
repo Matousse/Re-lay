@@ -3,7 +3,20 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useMutation } from "@tanstack/react-query";
-import { Archive, Check, ChevronDown, Loader2, Plug, Send, Sparkles, X } from "lucide-react";
+import {
+  Archive,
+  AtSign,
+  BookOpen,
+  Check,
+  ChevronDown,
+  ClipboardList,
+  Globe,
+  Loader2,
+  Plug,
+  Send,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { RichText } from "@/components/assistant/rich-text";
 import { Button } from "@/components/ui/button";
@@ -46,6 +59,16 @@ const STEP_META: Record<string, StepMeta> = {
   run_reengagement: { label: "Running the re-engagement agent", logo: ANTHROPIC_LOGO },
   approve_play: { label: "Approving — syncing the CRM", logo: CONNECTOR_LOGOS.hubspot },
   reject_play: { label: "Closing the play", icon: Archive },
+  get_workspace_setup: { label: "Checking the workspace setup", icon: ClipboardList },
+  read_website: { label: "Reading the company website", icon: Globe },
+  save_company_context: { label: "Memorizing the company context", icon: BookOpen },
+  configure_sillage_persona: {
+    label: "Configuring the Sillage persona",
+    logo: CONNECTOR_LOGOS.sillage,
+  },
+  create_signal_agent: { label: "Creating a signal agent", logo: CONNECTOR_LOGOS.sillage },
+  watch_accounts: { label: "Watching accounts on Sillage", logo: CONNECTOR_LOGOS.sillage },
+  route_notifications: { label: "Routing the plays", icon: AtSign },
 };
 
 const stepMeta = (tool: string): StepMeta => STEP_META[tool] ?? { label: tool };

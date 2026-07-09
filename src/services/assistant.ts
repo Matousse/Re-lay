@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { getCompanyContext } from "@/integrations/company-context";
 import { env } from "@/lib/env";
-import { RELAY_TOOLS, type RelayTool } from "@/services/relay-tools";
+import { RELAY_TOOLS, runTool, type RelayTool } from "@/services/relay-tools";
 import type { AssistantEvent, AssistantReply, ChatMessage, ToolCallTrace } from "@/types/assistant";
 
 // The in-app assistant: Claude with its hands on the same tool registry the
@@ -32,6 +33,23 @@ When the user asks you to run or revive something, don't stop at reconnaissance:
 Be concise and concrete: short sentences, name companies, amounts and scores. You are talking to a sales rep, not a developer.
 
 Formatting: your replies render in a ~300px-wide chat panel that supports **bold**, \`code\` and simple pipe tables. Prefer short bullet lists. Tables: 3 columns MAXIMUM with short values (e.g. Company | € | Score) or they clip — when in doubt, use a list instead. No headings, no links, no nested markdown.`;
+
+// The company context (built during onboarding) rides the system prompt so
+// every answer speaks with knowledge of what the company sells and to whom.
+function buildSystemPrompt(): string {
+  const context = getCompanyContext();
+  if (!context) {
+    return `${SYSTEM_PROMPT}
+
+No company context is saved yet. If the user seems new, offer to onboard them: read their website (read_website), agree on a summary, save_company_context, then configure Sillage (configure_sillage_persona, create_signal_agent, watch_accounts) and route_notifications.`;
+  }
+  return `${SYSTEM_PROMPT}
+
+Company context (use it to sharpen every answer and plan):
+- Offering: ${context.offering}
+- ICP: ${context.icp}
+- Stakes: ${context.stakes}${context.notes ? `\n- Notes: ${context.notes}` : ""}`;
+}
 
 type AnthropicContentBlock =
   | { type: "text"; text: string }
@@ -106,7 +124,7 @@ export async function runAssistant(
         body: JSON.stringify({
           model,
           max_tokens: MAX_TOKENS,
-          system: SYSTEM_PROMPT,
+          system: buildSystemPrompt(),
           tools: toAnthropicTools(tools),
           messages: conversation,
         }),
@@ -153,8 +171,10 @@ export async function runAssistant(
       toolUses.map(async (use) => {
         emit({ type: "tool_start", name: use.name });
         const tool = tools.find((t) => t.name === use.name);
+        // runTool validates and never throws — a failing tool becomes text
+        // the model can react to, not an exception that kills the stream.
         const result = tool
-          ? await tool.handler(use.input ?? {})
+          ? await runTool(tool, use.input)
           : { text: `Unknown tool "${use.name}".`, isError: true };
         const isError = result.isError === true;
         toolCalls.push({ name: use.name, isError });

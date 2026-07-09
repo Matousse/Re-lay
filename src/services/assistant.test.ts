@@ -1,19 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import type { RelayTool } from "./relay-tools";
+import { defineTool, type RelayToolResult } from "./relay-tools";
 import { runAssistant } from "./assistant";
 
 const USER = [{ role: "user" as const, content: "Which deals are worth reviving?" }];
 
-function fakeTool(overrides: Partial<RelayTool> = {}): RelayTool {
-  return {
+// A registry-shaped tool with an observable handler, built the same way the
+// real tools are (defineTool), so the assistant loop is tested against the
+// actual execution contract.
+function fakeTool(result: RelayToolResult = { text: '{"stats":{"goVerdicts":5}}' }) {
+  const handler = vi.fn(async () => result);
+  const tool = defineTool({
     name: "list_revivable_deals",
     title: "List revivable deals",
     description: "…",
     schema: z.object({}),
-    handler: vi.fn(async () => ({ text: '{"stats":{"goVerdicts":5}}' })),
-    ...overrides,
-  };
+    handler,
+  });
+  return { tool, handler };
 }
 
 function jsonResponse(payload: unknown): Response {
@@ -35,7 +39,7 @@ describe("runAssistant", () => {
   });
 
   it("runs the tool-use loop: executes the tool, feeds the result back, returns the text", async () => {
-    const tool = fakeTool();
+    const { tool, handler } = fakeTool();
     const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => {
       if (fetchImpl.mock.calls.length === 1) {
         return jsonResponse({
@@ -60,7 +64,7 @@ describe("runAssistant", () => {
       onEvent: (event) => events.push(event.type),
     });
 
-    expect(tool.handler).toHaveBeenCalledWith({});
+    expect(handler).toHaveBeenCalledWith({});
     expect(result.reply).toContain("Kerneos");
     expect(result.toolCalls).toEqual([{ name: "list_revivable_deals", isError: false }]);
     // Progress events stream in order: thinking → tool lifecycle → thinking.
@@ -96,9 +100,7 @@ describe("runAssistant", () => {
   });
 
   it("marks failed tool calls in the trace and reports them to the model", async () => {
-    const tool = fakeTool({
-      handler: vi.fn(async () => ({ text: "The pipeline is offline.", isError: true })),
-    });
+    const { tool } = fakeTool({ text: "The pipeline is offline.", isError: true });
     const fetchImpl = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => {
       if (fetchImpl.mock.calls.length === 1) {
         return jsonResponse({
