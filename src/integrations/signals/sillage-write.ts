@@ -1,6 +1,5 @@
 import type { AxiosInstance } from "axios";
 import { z } from "zod";
-import { sleep } from "@/lib/async";
 import { attachSillageErrorInterceptor, sillageHttp } from "@/integrations/signals/http";
 import { env } from "@/lib/env";
 
@@ -57,12 +56,14 @@ export type UpdateAgentInput = {
 
 export interface SillageWriteClient {
   addTargetAccounts(domains: string[]): Promise<{ resolved: number; notFound: string[] }>;
+  countTargetAccounts(): Promise<number>;
   getPersona(): Promise<SillagePersona | null>;
   setPersona(persona: SillagePersona): Promise<void>;
   listAgents(): Promise<SillageAgent[]>;
   createAgent(input: CreateAgentInput): Promise<SillageAgent>;
   updateAgent(id: number, patch: UpdateAgentInput): Promise<void>;
   launchSignalRun(agentId: number, params?: { lookback_days?: number }): Promise<number[]>;
+  runAllAgents(params?: { lookback_days?: number }): Promise<{ agents: number; runs: number }>;
 }
 
 type ClientOptions = { pollIntervalMs?: number; maxPollAttempts?: number };
@@ -88,6 +89,13 @@ export class SillageRestClient implements SillageWriteClient {
     await this.pollAccountIngestion();
     const notFound = await this.readNotFoundDomains();
     return { resolved: domains.length - notFound.length, notFound };
+  }
+
+  // How many target accounts Sillage is watching — the resolved count from the
+  // list status (excludes not-found), for the integrations card.
+  async countTargetAccounts(): Promise<number> {
+    const { data } = await this.http.get("/v2/top-account-list/status");
+    return unwrap<{ total_accounts?: number }>(data)?.total_accounts ?? 0;
   }
 
   async getPersona(): Promise<SillagePersona | null> {
@@ -129,6 +137,35 @@ export class SillageRestClient implements SillageWriteClient {
       .filter((id): id is number => typeof id === "number");
   }
 
+  // The "Run on a signal" gesture: fire one signal run per agent, then wait for
+  // every run to reach a terminal stage before the caller reads the fresh
+  // detections. Same launch-then-poll shape as addTargetAccounts.
+  async runAllAgents(
+    params: { lookback_days?: number } = {},
+  ): Promise<{ agents: number; runs: number }> {
+    const agents = await this.listAgents();
+    const requestIds: number[] = [];
+    for (const agent of agents) {
+      requestIds.push(...(await this.launchSignalRun(agent.id, params)));
+    }
+    await Promise.all(requestIds.map((id) => this.pollSignalRun(id)));
+    return { agents: agents.length, runs: requestIds.length };
+  }
+
+  // Poll one signal run to a terminal stage. completed / completed_partial are
+  // both success (partial = some accounts skipped, but the produced detections
+  // are real); failed is a hard error.
+  private async pollSignalRun(id: number): Promise<void> {
+    await this.poll(`signal run ${id}`, async () => {
+      const { data } = await this.http.get(`/v2/workspace/signal-runs/${id}`);
+      const stage = unwrap<{ stage?: string }>(data)?.stage;
+      return {
+        done: stage === "completed" || stage === "completed_partial",
+        failed: stage === "failed",
+      };
+    });
+  }
+
   private async pollAccountIngestion(): Promise<void> {
     await this.poll("target-account ingestion", async () => {
       const { data } = await this.http.get("/v2/top-account-list/status");
@@ -139,8 +176,8 @@ export class SillageRestClient implements SillageWriteClient {
 
   private async readNotFoundDomains(): Promise<string[]> {
     const { data } = await this.http.get("/v2/top-account-list/accounts/not-found");
-    const rows = unwrap<Array<{ user_input?: string }>>(data) ?? [];
-    return rows.map((row) => row.user_input).filter((input): input is string => Boolean(input));
+    const rows = unwrap<NotFoundRow[]>(data) ?? [];
+    return rows.map(notFoundLabel).filter((label): label is string => Boolean(label));
   }
 
   // Sillage emits no webhooks: poll the status endpoint politely to a terminal
@@ -171,23 +208,49 @@ function unwrap<T>(payload: unknown): T {
   return payload as T;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// A not-found row echoes back the `user_input` we sent, which is the `{domain}`
+// object — not a bare string. Pull a human-readable identifier out of it.
+type NotFoundRow = { user_input?: unknown; domain?: string };
+function notFoundLabel(row: NotFoundRow): string | null {
+  if (typeof row.domain === "string") return row.domain;
+  const input = row.user_input;
+  if (typeof input === "string") return input;
+  if (input && typeof input === "object") {
+    const fields = input as Record<string, unknown>;
+    const value = fields.domain ?? fields.linkedin_url ?? Object.values(fields)[0];
+    return typeof value === "string" ? value : null;
+  }
+  return null;
+}
+
 const OFFLINE_MESSAGE =
   "Sillage isn't connected — set SILLAGE_API_KEY (sk_live_…) to run the sync.";
+
+// Distinguishes "no key configured" from a live Sillage error (402/403/429):
+// callers that degrade gracefully offline (refreshSignals → empty list) can
+// match on the type instead of the message.
+export class SillageOfflineError extends Error {}
 
 // No key → every call refuses with the same actionable message, which the sync
 // route turns into an `error` event. Mirrors makeSignalSource's OFFLINE_SOURCE.
 function offlineClient(): SillageWriteClient {
   const unavailable = async (): Promise<never> => {
-    throw new Error(OFFLINE_MESSAGE);
+    throw new SillageOfflineError(OFFLINE_MESSAGE);
   };
   return {
     addTargetAccounts: unavailable,
+    countTargetAccounts: unavailable,
     getPersona: unavailable,
     setPersona: unavailable,
     listAgents: unavailable,
     createAgent: unavailable,
     updateAgent: unavailable,
     launchSignalRun: unavailable,
+    runAllAgents: unavailable,
   };
 }
 

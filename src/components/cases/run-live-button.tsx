@@ -32,14 +32,23 @@ export function RunLiveButton({ disabled = false }: { disabled?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
+  // Opening the dialog triggers the Sillage agents (one run each), waits for
+  // them, then returns the fresh detections — so this is a side-effecting POST,
+  // not the pure GET /api/signals. refetchOnWindowFocus is off and there's no
+  // blind retry: a re-run only happens on an explicit reopen.
   const signals = useQuery({
-    queryKey: ["signals"],
+    queryKey: ["signals", "refresh"],
     queryFn: async (): Promise<Signal[]> => {
-      const res = await fetch(withBasePath("/api/signals"));
-      if (!res.ok) throw new Error("Failed to load signals");
+      const res = await fetch(withBasePath("/api/signals/refresh"), { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? "Failed to refresh signals");
+      }
       return res.json();
     },
     enabled: open,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const run = useMutation({
@@ -86,13 +95,15 @@ export function RunLiveButton({ disabled = false }: { disabled?: boolean }) {
           {signals.isLoading && (
             <p className="text-muted-foreground flex items-center gap-2 py-6 text-sm">
               <Loader2 aria-hidden className="size-4 animate-spin" />
-              Loading signals…
+              Les agents Sillage scannent tes comptes…
             </p>
           )}
 
           {signals.isError && (
             <p className="py-6 text-sm text-red-600 dark:text-red-400">
-              Couldn&apos;t load signals. Is the signal source reachable?
+              {signals.error instanceof Error
+                ? signals.error.message
+                : "Couldn't refresh signals. Is Sillage reachable?"}
             </p>
           )}
 

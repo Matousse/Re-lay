@@ -29,6 +29,9 @@ class FakeSillage implements SillageWriteClient {
     this.addedDomains = domains;
     return { resolved: domains.length, notFound: [] };
   }
+  async countTargetAccounts() {
+    return this.addedDomains.length;
+  }
   async getPersona() {
     return this.seed.persona ?? null;
   }
@@ -48,6 +51,11 @@ class FakeSillage implements SillageWriteClient {
   async launchSignalRun(agentId: number, params: { lookback_days?: number } = {}) {
     this.runs.push({ agentId, lookback: params.lookback_days });
     return [agentId * 10];
+  }
+  async runAllAgents() {
+    const agents = await this.listAgents();
+    for (const agent of agents) await this.launchSignalRun(agent.id);
+    return { agents: agents.length, runs: agents.length };
   }
 }
 

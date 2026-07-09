@@ -15,6 +15,7 @@ import {
   type PlatformIntegration,
 } from "@/services/connectors";
 import { getHubSpotHealth, type HubSpotHealth } from "@/services/health";
+import { countWatchedAccounts } from "@/services/sillage-sync";
 import type { ConnectorStates } from "@/types/connectors";
 
 export const metadata: Metadata = {
@@ -42,9 +43,9 @@ const CONNECTORS: Record<Connector["id"], Connector> = {
     role: "Signal engine",
     description:
       "Streams buying signals in real time: people moves, funding rounds, competitor issues, hiring surges.",
-    detail: "Watching 214 closed-lost accounts",
+    detail: "Watching your closed-lost accounts",
     lastSync: "Live — last event 2 min ago",
-    successDetail: "214 closed-lost accounts are now being watched for signals.",
+    successDetail: "Your closed-lost accounts are now being watched for signals.",
   },
   fullenrich: {
     id: "fullenrich",

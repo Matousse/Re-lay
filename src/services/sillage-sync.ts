@@ -68,6 +68,8 @@ const AGENT_TARGETS: AgentTarget[] = [
 ];
 
 const KEYWORD_LOOKBACK_DAYS = 90;
+const RUN_RETRIES = 2;
+const RUN_RETRY_DELAY_MS = 1500;
 
 // Sillage blocks the workspace (and 422s the keyword agent) unless the persona
 // carries at least one job_title and one location. When the CRM's contacts yield
@@ -91,6 +93,14 @@ export async function listClosedLostForSync(
   const crm = deps.crm ?? makeCrm();
   const accounts = await crm.listClosedLostAccounts();
   return { accounts, persona: derivePersona(accounts) };
+}
+
+// How many closed-lost accounts Sillage is currently watching — for the
+// integrations card. Callers guard with .catch (offline throws), so this stays
+// a thin pass-through to the live count.
+export async function countWatchedAccounts(deps: Pick<SyncDeps, "sillage"> = {}): Promise<number> {
+  const sillage = deps.sillage ?? makeSillageWriteClient();
+  return sillage.countTargetAccounts();
 }
 
 // job_title[] / location[] are what Sillage minimally needs; additional_info
@@ -218,17 +228,30 @@ async function launchRuns(
   sillage: SillageWriteClient,
   agents: SyncSummary["agents"],
 ): Promise<StepResult<SyncSummary["runs"]>> {
+  // A just-created agent isn't instantly runnable — its POST id can 404 the run.
+  // Re-resolve each id from a fresh list, retry the transient miss, and treat a
+  // run that still won't launch as pending (non-fatal): the workspace is set up,
+  // and a re-sync (idempotent) launches it once the agent has settled.
+  const live = await sillage.listAgents();
   const runs: SyncSummary["runs"] = [];
+  const pending: string[] = [];
+
   for (const agent of agents) {
-    const isKeywordAgent = agent.type !== "job_update";
-    const signalRequestIds = await sillage.launchSignalRun(
-      agent.id,
-      isKeywordAgent ? { lookback_days: KEYWORD_LOOKBACK_DAYS } : {},
-    );
-    runs.push({ agentId: agent.id, signalRequestIds });
+    const agentId = live.find((candidate) => candidate.type === agent.type)?.id ?? agent.id;
+    const params = agent.type === "job_update" ? {} : { lookback_days: KEYWORD_LOOKBACK_DAYS };
+    try {
+      const signalRequestIds = await withRetry(() => sillage.launchSignalRun(agentId, params));
+      runs.push({ agentId, signalRequestIds });
+    } catch {
+      pending.push(agent.type);
+    }
   }
+
   const launched = runs.reduce((sum, run) => sum + run.signalRequestIds.length, 0);
-  return { value: runs, detail: `${launched} run${launched === 1 ? "" : "s"} launched` };
+  const detail = pending.length
+    ? `${launched} launched · ${pending.length} pending (re-sync to retry)`
+    : `${launched} run${launched === 1 ? "" : "s"} launched`;
+  return { value: runs, detail };
 }
 
 type StepResult<T> = { value: T; detail: string };
@@ -249,6 +272,23 @@ async function runStep<T>(
     emit({ type: "step_end", step, ok: false, detail: errorMessage(error) });
     throw error;
   }
+}
+
+// Signal runs are idempotent (Sillage dedupes matches), so retrying a transient
+// failure — a just-created agent not yet runnable — is safe.
+async function withRetry<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await run();
+    } catch (error) {
+      if (attempt >= RUN_RETRIES) throw error;
+      await sleep(RUN_RETRY_DELAY_MS);
+    }
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function hasKeywords(agent: SillageAgent): boolean {

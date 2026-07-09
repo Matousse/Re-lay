@@ -107,6 +107,77 @@ describe("SillageRestClient", () => {
     expect(post).toHaveBeenLastCalledWith("/v2/workspace/signal-runs", { agent_id: 8 });
   });
 
+  it("runs a signal run per agent and polls each run to a terminal stage", async () => {
+    const pollCounts = new Map<number, number>();
+    const posted: number[] = [];
+    const http = fakeHttp({
+      post: async (_url, body) => {
+        const agentId = (body as { agent_id: number }).agent_id;
+        posted.push(agentId);
+        return { data: [{ signal_request_id: agentId * 10, stage: "running" }] };
+      },
+      get: async (url) => {
+        if (url.includes("/agents")) {
+          return {
+            data: [
+              { id: 1, type: "job_update", enabled: true },
+              { id: 2, type: "keyword_detection", enabled: true },
+            ],
+          };
+        }
+        const match = /signal-runs\/(\d+)/.exec(url);
+        if (match) {
+          const id = Number(match[1]);
+          const seen = (pollCounts.get(id) ?? 0) + 1;
+          pollCounts.set(id, seen);
+          // Loop once through "running" before reporting completion.
+          return { data: { stage: seen < 2 ? "running" : "completed" } };
+        }
+        throw new Error(`unexpected ${url}`);
+      },
+    });
+    const client = new SillageRestClient("k", http, fast);
+
+    const result = await client.runAllAgents();
+
+    expect(result).toEqual({ agents: 2, runs: 2 });
+    expect(posted).toEqual([1, 2]);
+    expect(pollCounts.get(10)).toBe(2); // polled past the "running" tick
+    expect(pollCounts.get(20)).toBe(2);
+  });
+
+  it("treats completed_partial as a successful run", async () => {
+    const http = fakeHttp({
+      post: async (_url, body) => ({
+        data: [{ signal_request_id: (body as { agent_id: number }).agent_id }],
+      }),
+      get: async (url) => {
+        if (url.includes("/agents"))
+          return { data: [{ id: 5, type: "job_update", enabled: true }] };
+        return { data: { stage: "completed_partial" } };
+      },
+    });
+    const client = new SillageRestClient("k", http, fast);
+
+    await expect(client.runAllAgents()).resolves.toEqual({ agents: 1, runs: 1 });
+  });
+
+  it("rejects when a signal run reports the failed stage", async () => {
+    const http = fakeHttp({
+      post: async (_url, body) => ({
+        data: [{ signal_request_id: (body as { agent_id: number }).agent_id }],
+      }),
+      get: async (url) => {
+        if (url.includes("/agents"))
+          return { data: [{ id: 9, type: "job_update", enabled: true }] };
+        return { data: { stage: "failed" } };
+      },
+    });
+    const client = new SillageRestClient("k", http, fast);
+
+    await expect(client.runAllAgents()).rejects.toThrow(/failed/i);
+  });
+
   it("surfaces the RFC 9457 detail on a typed error", async () => {
     const http = axios.create({ baseURL: "https://api.getsillage.com/api" });
     http.defaults.adapter = async (config) => {
@@ -128,5 +199,6 @@ describe("SillageRestClient", () => {
   it("refuses every call when no key is set", async () => {
     const client = makeSillageWriteClient(undefined);
     await expect(client.listAgents()).rejects.toThrow(/SILLAGE_API_KEY/);
+    await expect(client.runAllAgents()).rejects.toThrow(/SILLAGE_API_KEY/);
   });
 });

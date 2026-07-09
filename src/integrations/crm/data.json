@@ -24,7 +24,13 @@
     "status": "active",
     "lossReason": null,
     "lostAt": null,
-    "notes": [{ "date": "2024-06-01", "author": "Alex", "text": "En cours de négociation." }]
+    "notes": [
+      {
+        "date": "2024-06-01",
+        "author": "Alex",
+        "text": "En cours de négociation."
+      }
+    ]
   },
   {
     "id": "acc_3",
@@ -54,7 +60,11 @@
     "status": "lost",
     "lossReason": "blocked_by_stakeholder",
     "lostAt": "2026-01-14",
-    "contact": { "name": "Claire Fontaine", "role": "CMO", "email": "claire.fontaine@kerneos.io" },
+    "contact": {
+      "name": "Claire Fontaine",
+      "role": "CMO",
+      "email": "claire.fontaine@kerneos.io"
+    },
     "notes": [
       {
         "date": "2025-11-20",
@@ -131,7 +141,11 @@
     "status": "lost",
     "lossReason": "timing",
     "lostAt": "2026-02-17",
-    "contact": { "name": "Marc Vidal", "role": "CRO", "email": "marc.vidal@altiflow.com" },
+    "contact": {
+      "name": "Marc Vidal",
+      "role": "CRO",
+      "email": "marc.vidal@altiflow.com"
+    },
     "notes": [
       {
         "date": "2026-01-15",
@@ -181,7 +195,11 @@
     "status": "lost",
     "lossReason": "no_need",
     "lostAt": "2026-01-30",
-    "contact": { "name": "Paul Lemaire", "role": "CFO", "email": "paul.lemaire@brioz.com" },
+    "contact": {
+      "name": "Paul Lemaire",
+      "role": "CFO",
+      "email": "paul.lemaire@brioz.com"
+    },
     "notes": [
       {
         "date": "2025-12-18",
