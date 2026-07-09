@@ -21,6 +21,10 @@ yarn-error.log*
 # env
 .env
 
+# pitch / presentation
+presentation/
+presentation.zip
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
