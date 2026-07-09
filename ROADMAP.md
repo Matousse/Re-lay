@@ -33,10 +33,19 @@ drive over MCP) and **conversational** (a bot you can talk to) — not just a UI
   (Resend REST, zero deps, test sender by default). Env-gated per channel, fail-safe, surfaced in
   the sync receipt + toasts (`emailNotified`).
 - **"Ask Re:lay" assistant — voice bubble Tier 1** (9 juil.) — floating chat bubble, Claude
-  (`claude-sonnet-5`) running the Anthropic tool-use loop over the shared registry
-  (`services/relay-tools.ts` — same 7 tools as the MCP, now consumed by both entry points). Tool
-  calls surface as chips; system prompt enforces the confirm-before-approve gate; honest no-op
-  message without `ANTHROPIC_API_KEY`.
+  running the Anthropic tool-use loop over the shared registry (`services/relay-tools.ts` — same
+  7 tools as the MCP, consumed by both entry points). Streams NDJSON progress events: every tool
+  call and thinking pause is its own persistent bubble (vendor favicon, spinner → check/cross),
+  expandable to show what happened (result summary / error text). Model-routed: chat loop on
+  **Haiku 4.5** (~3s turns, `ASSISTANT_MODEL` override), pipeline reasoning stays on Sonnet.
+  Markdown-lite rendering (bold, code, tables), confirm-before-approve gate in the system prompt,
+  living launcher (float + halo + busy badge), honest no-op without `ANTHROPIC_API_KEY`.
+- **Sillage branché en réel** (9 juil., team) — adapter v1 (feed person-centric) avec **fallback
+  v2** quand le feed v1 est vide (cas du workspace hackathon : détections non lead-attached,
+  visibles uniquement via `POST /v2/workspace/signals/query`) ; résolution de la société jusqu'au
+  slug d'URL LinkedIn. Les fakes signaux sont supprimés : sans `SILLAGE_API_KEY`, liste vide.
+  Vérifié live (50 postings Qonto). Compte CRM Qonto closed-lost seedé pour que le signal réel
+  ait un deal à ressusciter.
 
 ---
 
@@ -294,9 +303,10 @@ for an Anthropic agentic hackathon — the Anthropic swap and the MCP server —
 we ship the top ~5 and the rest is stretch. Most rows land on Darren, so it's worth pulling **Mabrouk
 / Jana** onto the voice bubble or the Gamma port to parallelize.
 
-**Rule of the day**: with keys for every tool in hand, we run **real adapters by default** — but
-every integration still ships behind a port with a fake, so the demo can fall back instantly if the
-venue wifi, a rate limit, or a credit balance bites mid-pitch.
+**Rule of the day**: with keys for every tool in hand, we run **real adapters by default**. CRM,
+enrichment and the LLM still fall back to fakes without their key; signals no longer have a fake
+(team decision, 9 juil.) — the demo needs `SILLAGE_API_KEY`, and the curated cases cover a
+worst-case offline pitch.
 
 ---
 

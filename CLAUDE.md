@@ -40,7 +40,10 @@ integrations/  → services/  → routes API (route.ts) / RSC (page.tsx)
 - **`src/services/`** : logique métier et orchestration (scoring des signaux, génération des
   messages de relance, etc.). Consomme `integrations/`.
 - **`src/app/api/**/route.ts`** : point d'entrée HTTP. Valide l'input avec Zod (`InputSchema`),
-  appelle un service, ne contient aucune logique métier.
+  appelle un service, ne contient aucune logique métier. Deux entrées spéciales, mêmes règles :
+  `api/[transport]` (serveur MCP) et `api/assistant` (chat, stream NDJSON) — toutes deux
+  consomment le registre d'outils partagé `services/relay-tools.ts` (un outil ajouté là est
+  exposé aux deux à la fois).
 - **`src/app/**/page.tsx`** : RSC qui appellent directement un service pour la lecture serveur.
 - **`src/types/`** : schémas Zod du domaine (suffixe `Schema`) et types dérivés.
 - **`src/lib/`** : utilitaires transverses (`env.ts`, `utils.ts` de shadcn, futur query client).
@@ -56,13 +59,14 @@ avant d'être utilisée — jamais de `process.env.X` direct ailleurs dans le co
 ## Commandes
 
 ```bash
-npm run dev          # serveur de dev (Turbopack)
+npm run dev           # serveur de dev (Turbopack)
 npm run build         # build de prod
+npm run start         # sert le build
 npm run lint          # ESLint
 npm run typecheck     # tsc --noEmit
 npm run format        # Prettier --write
-npm run format:check  # Prettier --check
-npm run test          # Vitest
+npm run test          # Vitest (watch)
+npm run test:run      # Vitest (une passe)
 ```
 
 Un hook Husky (`pre-commit`) lance `lint-staged` (ESLint --fix + Prettier) sur les fichiers
