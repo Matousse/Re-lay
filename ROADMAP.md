@@ -40,6 +40,20 @@ drive over MCP) and **conversational** (a bot you can talk to) — not just a UI
   **Haiku 4.5** (~3s turns, `ASSISTANT_MODEL` override), pipeline reasoning stays on Sonnet.
   Markdown-lite rendering (bold, code, tables), confirm-before-approve gate in the system prompt,
   living launcher (float + halo + busy badge), honest no-op without `ANTHROPIC_API_KEY`.
+- **Onboarding conversationnel** (9 juil.) — le premier pas manquant du parcours, fait en parlant :
+  7 nouveaux outils au registre (14 au total, chat + MCP) — `get_workspace_setup` (état Sillage +
+  contexte), `read_website` (scrape → compréhension de l'offre/ICP/enjeux), `save_company_context`
+  (mémorisé, injecté dans le system prompt de l'assistant), `configure_sillage_persona` /
+  `create_signal_agent` / `watch_accounts` (écritures réelles sur le workspace Sillage, confirmation
+  humaine exigée), `route_notifications` (owner assigné : @-mention Slack + email direct — le
+  dispatcher route vers lui). Reste à faire : upload PDF/docs pour le contexte (blocs document
+  Anthropic), owners par deal, injecter le contexte dans le strategist du pipeline (fichiers Mat).
+- **Onboarding wizard `/onboarding`** (9 juil.) — la face guidée du même cerveau : URL → animation
+  de scan → Claude (Sonnet, `structured`) extrait offering/ICP/enjeux → cartes éditables →
+  mémorisation → routage des plays → checklist live du workspace. Entrée : bannière dashboard tant
+  que le contexte n'est pas connu. Même stores/services que les outils de l'assistant.
+- **Page Integrations enrichie** (9 juil.) — section "Platform & channels" : Anthropic / Slack /
+  Resend en statut env réel (Connected / Key missing), Gamma & Gradium en "Coming soon".
 - **Sillage branché en réel** (9 juil., team) — adapter v1 (feed person-centric) avec **fallback
   v2** quand le feed v1 est vide (cas du workspace hackathon : détections non lead-attached,
   visibles uniquement via `POST /v2/workspace/signals/query`) ; résolution de la société jusqu'au

@@ -183,3 +183,37 @@
     animation: none;
   }
 }
+
+/* The onboarding CTA: a breathing emerald glow + a periodic sheen sweep. */
+@keyframes relay-cta-glow {
+  0%,
+  100% {
+    box-shadow: 0 8px 24px -8px rgb(16 185 129 / 0.55);
+  }
+  50% {
+    box-shadow: 0 10px 36px -4px rgb(16 185 129 / 0.85);
+  }
+}
+.animate-relay-cta-glow {
+  animation: relay-cta-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes relay-sheen {
+  0%,
+  60% {
+    transform: translateX(-150%) skewX(-18deg);
+  }
+  100% {
+    transform: translateX(400%) skewX(-18deg);
+  }
+}
+.animate-relay-sheen {
+  animation: relay-sheen 3.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-relay-cta-glow,
+  .animate-relay-sheen {
+    animation: none;
+  }
+}

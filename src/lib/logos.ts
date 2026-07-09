@@ -11,3 +11,13 @@ export const CONNECTOR_LOGOS: Record<ConnectorId, string> = {
   fullenrich: withBasePath("/logos/fullenrich.png"),
   hubspot: withBasePath("/logos/hubspot.png"),
 };
+
+// Platform pieces shown on the Integrations page (env-driven, no connect
+// dialog) and used as step badges in the assistant.
+export const PLATFORM_LOGOS = {
+  anthropic: withBasePath("/logos/anthropic.png"),
+  slack: withBasePath("/logos/slack.png"),
+  resend: withBasePath("/logos/resend.png"),
+  gamma: withBasePath("/logos/gamma.png"),
+  gradium: withBasePath("/logos/gradium.png"),
+} as const;

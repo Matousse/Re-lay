@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { AnimatedNumber } from "@/components/animated-number";
 import { AgentRunDialog } from "@/components/cases/agent-run-dialog";
 import { CasesTable } from "@/components/cases/cases-table";
@@ -8,10 +10,16 @@ import { SetupBanner } from "@/components/connectors/setup-banner";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { ENTER, enterDelay } from "@/lib/motion";
 import { missingConnectors } from "@/services/connectors";
+import { hasCompanyContext } from "@/services/onboarding";
 import { getStats, listCases } from "@/services/reengagement";
 
 export default async function Home() {
-  const [stats, cases, missing] = await Promise.all([getStats(), listCases(), missingConnectors()]);
+  const [stats, cases, missing, knowsCompany] = await Promise.all([
+    getStats(),
+    listCases(),
+    missingConnectors(),
+    hasCompanyContext(),
+  ]);
   const setupNeeded = missing.length > 0;
 
   const tiles = [
@@ -41,6 +49,38 @@ export default async function Home() {
         <div className="mb-8">
           <SetupBanner missing={missing} />
         </div>
+      )}
+
+      {!setupNeeded && !knowsCompany && (
+        <Link
+          href="/onboarding"
+          className={`group animate-relay-cta-glow relative mb-8 flex items-center justify-between gap-4 overflow-hidden rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 px-4 py-3 text-white transition-transform duration-300 hover:scale-[1.01] ${ENTER}`}
+          style={enterDelay(1)}
+        >
+          {/* Periodic sheen sweeping across the banner. */}
+          <span
+            aria-hidden
+            className="animate-relay-sheen pointer-events-none absolute inset-y-0 left-0 w-24 bg-white/20 blur-md"
+          />
+          <div className="relative flex items-center gap-3">
+            <span className="flex size-9 items-center justify-center rounded-lg bg-white/15 ring-1 ring-white/30">
+              <Sparkles aria-hidden className="size-4 animate-pulse text-white" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold">Teach Re:lay your company — two minutes</p>
+              <p className="text-xs text-white/85">
+                It reads your website, learns your ICP and routes the plays to the right human.
+              </p>
+            </div>
+          </div>
+          <span className="relative flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-xs font-semibold ring-1 ring-white/30 transition-all duration-300 group-hover:bg-white/25">
+            Start
+            <ArrowRight
+              aria-hidden
+              className="size-3.5 transition-transform duration-300 group-hover:translate-x-1"
+            />
+          </span>
+        </Link>
       )}
 
       <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
