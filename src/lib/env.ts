@@ -10,6 +10,10 @@ const envSchema = z.object({
   // FullEnrich API key. Set it and `researcher` resolves verified emails/phones
   // via the real API; unset, it falls back to the deterministic fake contact.
   FULL_ENRICH_API_KEY: z.string().min(1).optional(),
+  // HubSpot Private App access token (Settings → Integrations → Private Apps).
+  // Set it and the CRM port talks to the real portal; unset, it runs on the
+  // seeded FakeCrm (see makeCrm).
+  HUBSPOT_ACCESS_TOKEN: z.string().min(1).optional(),
   // Slack incoming-webhook URL. Set it and every approval posts to the channel;
   // unset, the approval flow just skips the notification.
   SLACK_WEBHOOK_URL: z.url().optional(),
@@ -23,13 +27,25 @@ const envSchema = z.object({
   NOTIFY_EMAIL_TO: z.email().optional(),
 });
 
+// A .env copied from .env.example still carries <PLACEHOLDER> values — and
+// script/setup.sh does exactly that copy. "Optional" in Zod means *absent*, not
+// *present but invalid*, so an unfilled url()/email() field would crash the
+// parse. Treat empty strings and <...> placeholders as unset: the integration
+// just stays on its fake until a real value is filled in.
+function clean(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed || /^<.*>$/.test(trimmed)) return undefined;
+  return trimmed;
+}
+
 export const env = envSchema.parse({
-  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-  SILLAGE_API_KEY: process.env.SILLAGE_API_KEY,
-  FULL_ENRICH_API_KEY: process.env.FULL_ENRICH_API_KEY,
-  SLACK_WEBHOOK_URL: process.env.SLACK_WEBHOOK_URL,
-  ASSISTANT_MODEL: process.env.ASSISTANT_MODEL,
-  RESEND_API_KEY: process.env.RESEND_API_KEY,
-  RESEND_FROM: process.env.RESEND_FROM,
-  NOTIFY_EMAIL_TO: process.env.NOTIFY_EMAIL_TO,
+  ANTHROPIC_API_KEY: clean(process.env.ANTHROPIC_API_KEY),
+  SILLAGE_API_KEY: clean(process.env.SILLAGE_API_KEY),
+  FULL_ENRICH_API_KEY: clean(process.env.FULL_ENRICH_API_KEY),
+  HUBSPOT_ACCESS_TOKEN: clean(process.env.HUBSPOT_ACCESS_TOKEN),
+  SLACK_WEBHOOK_URL: clean(process.env.SLACK_WEBHOOK_URL),
+  ASSISTANT_MODEL: clean(process.env.ASSISTANT_MODEL),
+  RESEND_API_KEY: clean(process.env.RESEND_API_KEY),
+  RESEND_FROM: clean(process.env.RESEND_FROM),
+  NOTIFY_EMAIL_TO: clean(process.env.NOTIFY_EMAIL_TO),
 });

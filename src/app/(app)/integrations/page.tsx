@@ -2,17 +2,23 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { Plug } from "lucide-react";
 import { ConnectDialog } from "@/components/connectors/connect-dialog";
+import { RefreshHubspotButton } from "@/components/connectors/refresh-hubspot-button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CONNECTOR_LOGOS } from "@/lib/logos";
 import { ENTER, enterDelay } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { getConnectorStates } from "@/services/connectors";
+import { getHubSpotHealth } from "@/services/health";
 import type { ConnectorId } from "@/types/connectors";
 
 export const metadata: Metadata = {
   title: "Integrations — Re:lay",
 };
+
+// The HubSpot card runs a live probe on every render; never serve it from a
+// stale cache, or a deleted contact/company would linger.
+export const dynamic = "force-dynamic";
 
 const INTEGRATIONS: {
   id: ConnectorId;
@@ -56,7 +62,10 @@ const INTEGRATIONS: {
 ];
 
 export default async function IntegrationsPage() {
-  const states = await getConnectorStates();
+  const [states, hubspotHealth] = await Promise.all([getConnectorStates(), getHubSpotHealth()]);
+  // HubSpot shows real numbers when a token is live; with no token it stays in
+  // pure demo mode (the mocked story below). Either/or — never a mix.
+  const hubspotLive = hubspotHealth.mode === "live";
 
   return (
     <main className="mx-auto w-full max-w-6xl px-6 py-10">
@@ -69,7 +78,10 @@ export default async function IntegrationsPage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         {INTEGRATIONS.map((integration, index) => {
-          const connected = states[integration.id];
+          // For HubSpot with a live token, the badge reflects the real probe;
+          // otherwise it's the mocked connector toggle.
+          const liveHubspot = integration.id === "hubspot" && hubspotLive;
+          const connected = liveHubspot ? hubspotHealth.connected : states[integration.id];
           return (
             <Card
               key={integration.name}
@@ -123,7 +135,30 @@ export default async function IntegrationsPage() {
               <CardContent className="space-y-3 text-sm">
                 <p className="text-muted-foreground">{integration.description}</p>
                 <div className="border-t pt-3">
-                  {connected ? (
+                  {liveHubspot && hubspotHealth.connected ? (
+                    <div className="space-y-2">
+                      <p className="font-medium">
+                        {hubspotHealth.companies} companies · {hubspotHealth.closedLost} closed-lost
+                        · {hubspotHealth.contacts} contacts
+                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-muted-foreground text-xs">
+                          Live portal · checked just now
+                        </p>
+                        <RefreshHubspotButton />
+                      </div>
+                    </div>
+                  ) : liveHubspot ? (
+                    <div className="space-y-2">
+                      <p className="font-medium text-red-600 dark:text-red-400">
+                        Token invalid or expired
+                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-muted-foreground text-xs">{hubspotHealth.detail}</p>
+                        <RefreshHubspotButton />
+                      </div>
+                    </div>
+                  ) : connected ? (
                     <>
                       <p className="font-medium">{integration.detail}</p>
                       <p className="text-muted-foreground text-xs">{integration.lastSync}</p>

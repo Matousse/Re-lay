@@ -44,5 +44,182 @@
         "text": "Deal clos perdu : « revenez quand l'équipe Risk sera en place, on n'a personne pour porter le sujet en interne »."
       }
     ]
+  },
+  {
+    "id": "acc_kerneos",
+    "company": "Kerneos Analytics",
+    "domain": "kerneos.io",
+    "industry": "Data & Analytics",
+    "amount": 86400,
+    "status": "lost",
+    "lossReason": "blocked_by_stakeholder",
+    "lostAt": "2026-01-14",
+    "contact": { "name": "Claire Fontaine", "role": "CMO", "email": "claire.fontaine@kerneos.io" },
+    "notes": [
+      {
+        "date": "2025-11-20",
+        "author": "Nadia",
+        "text": "POC concluant, le Head of Growth est un vrai champion. Reste l'arbitrage comité."
+      },
+      {
+        "date": "2026-01-14",
+        "author": "Nadia",
+        "text": "Champion (Head of Growth) était partant, mais la CMO Claire Fontaine a bloqué sur le prix et tué le deal au comité final."
+      }
+    ]
+  },
+  {
+    "id": "acc_wattly",
+    "company": "Wattly",
+    "domain": "wattly.energy",
+    "industry": "Energy / IoT",
+    "amount": 48000,
+    "status": "lost",
+    "lossReason": "no_budget",
+    "lostAt": "2025-11-21",
+    "contact": {
+      "name": "Igor Melnik",
+      "role": "VP Operations",
+      "email": "igor.melnik@wattly.energy"
+    },
+    "notes": [
+      {
+        "date": "2025-10-02",
+        "author": "Thomas",
+        "text": "Très bon fit produit côté ops. Le sujet : timing budgétaire."
+      },
+      {
+        "date": "2025-11-21",
+        "author": "Thomas",
+        "text": "Bon fit, mais le budget 2026 était déjà engagé. Nous ont demandé de revenir 'un jour'."
+      }
+    ]
+  },
+  {
+    "id": "acc_meridiem",
+    "company": "Meridiem",
+    "domain": "meridiem.fr",
+    "industry": "Fintech",
+    "amount": 72000,
+    "status": "lost",
+    "lossReason": "competitor",
+    "lostAt": "2025-12-09",
+    "contact": {
+      "name": "Sofia Andrade",
+      "role": "Head of RevOps",
+      "email": "sofia.andrade@meridiem.fr"
+    },
+    "notes": [
+      {
+        "date": "2025-11-05",
+        "author": "Léa",
+        "text": "Short-list à deux. Sofia (RevOps) penche pour nous, mais l'intégration ERP pèse lourd."
+      },
+      {
+        "date": "2025-12-09",
+        "author": "Léa",
+        "text": "Choix de Salesloop pour son intégration ERP native. Décision serrée (scoring 52/48)."
+      }
+    ]
+  },
+  {
+    "id": "acc_altiflow",
+    "company": "Altiflow",
+    "domain": "altiflow.com",
+    "industry": "Logistics",
+    "amount": 39500,
+    "status": "lost",
+    "lossReason": "timing",
+    "lostAt": "2026-02-17",
+    "contact": { "name": "Marc Vidal", "role": "CRO", "email": "marc.vidal@altiflow.com" },
+    "notes": [
+      {
+        "date": "2026-01-15",
+        "author": "Sam",
+        "text": "Intérêt réel mais réorg commerciale en cours, décision gelée."
+      },
+      {
+        "date": "2026-02-17",
+        "author": "Sam",
+        "text": "En pleine réorg : 'rappelez-nous quand la nouvelle sales org sera en place'."
+      }
+    ]
+  },
+  {
+    "id": "acc_toundra",
+    "company": "Toundra Studio",
+    "domain": "toundra.studio",
+    "industry": "Creative SaaS",
+    "amount": 18000,
+    "status": "lost",
+    "lossReason": "price",
+    "lostAt": "2026-03-05",
+    "contact": {
+      "name": "Jeanne Okafor",
+      "role": "Co-founder & COO",
+      "email": "jeanne.okafor@toundra.studio"
+    },
+    "notes": [
+      {
+        "date": "2026-02-10",
+        "author": "Thomas",
+        "text": "Équipe fan du produit, mais budget seed serré. Compare à une brique moins chère."
+      },
+      {
+        "date": "2026-03-05",
+        "author": "Thomas",
+        "text": "Adorent le produit, budget seed-stage. Sont partis sur une point solution moins chère."
+      }
+    ]
+  },
+  {
+    "id": "acc_brioz",
+    "company": "Brioz",
+    "domain": "brioz.com",
+    "industry": "Retail",
+    "amount": 25000,
+    "status": "lost",
+    "lossReason": "no_need",
+    "lostAt": "2026-01-30",
+    "contact": { "name": "Paul Lemaire", "role": "CFO", "email": "paul.lemaire@brioz.com" },
+    "notes": [
+      {
+        "date": "2025-12-18",
+        "author": "Léa",
+        "text": "Modèle retail offline-first. Le fit avec notre produit reste à démontrer."
+      },
+      {
+        "date": "2026-01-30",
+        "author": "Léa",
+        "text": "Ont conclu que le produit ne colle pas à leur modèle retail offline-first. Problème de fit de fond."
+      }
+    ]
+  },
+  {
+    "id": "acc_oberon",
+    "company": "Oberon Systems",
+    "domain": "oberon-systems.com",
+    "industry": "Cybersecurity",
+    "amount": 120000,
+    "status": "lost",
+    "lossReason": "competitor",
+    "lostAt": "2025-10-16",
+    "contact": {
+      "name": "Hugo Steiner",
+      "role": "Head of Sales Ops",
+      "email": "hugo.steiner@oberon-systems.com"
+    },
+    "notes": [
+      {
+        "date": "2025-08-30",
+        "author": "Nadia",
+        "text": "On gagne l'éval technique sur les features. Reste le risque migration côté sponsor."
+      },
+      {
+        "date": "2025-10-16",
+        "author": "Nadia",
+        "text": "Choix de l'incumbent après 9 mois d'éval. Politique interne : aucun sponsor VP pour défendre le switch."
+      }
+    ]
   }
 ]

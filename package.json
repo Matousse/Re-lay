@@ -16,11 +16,14 @@
     "format": "prettier --write .",
     "test": "vitest",
     "test:run": "vitest run",
+    "seed:hubspot": "node --env-file=.env script/seed-hubspot.mjs",
+    "hubspot:check": "node --env-file=.env script/check-hubspot.mjs",
     "prepare": "husky",
     "setup": "./script/setup.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
+    "@hubspot/api-client": "^14.0.1",
     "@langchain/anthropic": "^1.5.1",
     "@langchain/core": "^1.2.1",
     "@langchain/langgraph": "^1.4.7",
