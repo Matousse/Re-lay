@@ -1,5 +1,7 @@
-import axios, { type AxiosInstance } from "axios";
+import type { AxiosInstance } from "axios";
 import { z } from "zod";
+import { sleep } from "@/lib/async";
+import { attachSillageErrorInterceptor, sillageHttp } from "@/integrations/signals/http";
 import { env } from "@/lib/env";
 
 // The write half of the Sillage integration — the v2 REST surface the read
@@ -7,12 +9,17 @@ import { env } from "@/lib/env";
 // workspace: target accounts, persona, agents, signal runs. Every enqueuing
 // write returns 202 and is polled to a terminal state; persona is replace-whole
 // (the caller GET → merges → PUT); the target-account add merges, never wipes.
+// It shares the read side's host, auth and error style via sillageHttp.
 // Endpoints and rules come from the sillage-api skill.
 
-const BASE_URL = "https://api.getsillage.com";
 const AGENTS_PAGE_SIZE = 25; // Sillage caps /agents lower than the usual 100.
 const DEFAULT_POLL_INTERVAL_MS = 1500;
 const DEFAULT_MAX_POLL_ATTEMPTS = 40;
+// The first re-check after a not-yet-done poll. Most ingestions finish within a
+// second or two, so we look again quickly before settling into the steady
+// interval: a fast sync advances the UI at once, a slow one still gets the full
+// budget.
+const FIRST_POLL_INTERVAL_MS = 400;
 
 // Persona is replace-whole and carries fields we don't set (headcount, industry,
 // seniority…). We keep it open so GET → merge → PUT never drops what's already
@@ -68,25 +75,9 @@ export class SillageRestClient implements SillageWriteClient {
   constructor(apiKey: string, http?: AxiosInstance, options: ClientOptions = {}) {
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.maxPollAttempts = options.maxPollAttempts ?? DEFAULT_MAX_POLL_ATTEMPTS;
-    this.http =
-      http ??
-      axios.create({
-        baseURL: `${BASE_URL}/api`,
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      });
-
-    // Surface the RFC 9457 `detail` so typed errors (402 credits, 403 feature
-    // off, 422 bad payload) reach the user instead of a bare status.
-    this.http.interceptors.response.use(undefined, (error) => {
-      if (axios.isAxiosError(error)) {
-        const problem = error.response?.data as { detail?: string; title?: string } | undefined;
-        const reason = problem?.detail ?? problem?.title ?? error.message;
-        throw new Error(
-          `Sillage ${error.config?.url} ${error.response?.status ?? ""}: ${reason}`.trim(),
-        );
-      }
-      throw error;
-    });
+    // Default to the shared Sillage client; an injected instance (tests) still
+    // gets the same readable, typed-detail errors.
+    this.http = http ? attachSillageErrorInterceptor(http) : sillageHttp(apiKey);
   }
 
   async addTargetAccounts(domains: string[]): Promise<{ resolved: number; notFound: string[] }> {
@@ -163,7 +154,9 @@ export class SillageRestClient implements SillageWriteClient {
       const { done, failed } = await check();
       if (failed) throw new Error(`Sillage ${label} failed.`);
       if (done) return;
-      await sleep(this.pollIntervalMs);
+      const delayMs =
+        attempt === 0 ? Math.min(FIRST_POLL_INTERVAL_MS, this.pollIntervalMs) : this.pollIntervalMs;
+      await sleep(delayMs);
     }
   }
 }
@@ -176,10 +169,6 @@ function unwrap<T>(payload: unknown): T {
     return (payload as { data: T }).data;
   }
   return payload as T;
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const OFFLINE_MESSAGE =

@@ -1,5 +1,7 @@
-import axios, { type AxiosInstance } from "axios";
+import type { AxiosError, AxiosInstance } from "axios";
 import { z } from "zod";
+import { sleep } from "@/lib/async";
+import { attachErrorInterceptor, createApiClient } from "@/lib/http";
 import type { EnrichedContact } from "@/types/pipeline";
 import type { EnrichmentPort } from "@/integrations/enrichment/port";
 import { FakeEnrichment } from "@/integrations/enrichment/fake";
@@ -22,7 +24,7 @@ const BASE_URL = "https://app.fullenrich.com/api/v2";
 // Enrichment is async; poll until the batch reaches a terminal state. Kept
 // bounded so a single enrich() never blocks the pipeline indefinitely.
 const POLL_INTERVAL_MS = 3_000;
-const MAX_POLLS = 20;
+const MAX_POLL_ATTEMPTS = 20;
 
 const ENRICH_FIELDS = ["contact.work_emails", "contact.phones"] as const;
 
@@ -50,8 +52,6 @@ const ResultSchema = z.object({
 // Terminal statuses other than FINISHED — nothing more to wait for.
 const TERMINAL_FAILURES = new Set(["CANCELED", "CREDITS_INSUFFICIENT", "RATE_LIMIT", "UNKNOWN"]);
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 type EnrichInput = { company: string; personName?: string; personRole?: string };
 
 export class FullEnrichEnrichment implements EnrichmentPort {
@@ -59,27 +59,12 @@ export class FullEnrichEnrichment implements EnrichmentPort {
   // Delegated to whenever real enrichment can't return a verified contact.
   private fallback = new FakeEnrichment();
 
-  constructor(
-    private apiKey: string,
-    http?: AxiosInstance,
-  ) {
-    this.http =
-      http ??
-      axios.create({
-        baseURL: BASE_URL,
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-    // Preserve a readable, path-aware error (axios's default drops the path).
-    this.http.interceptors.response.use(undefined, (error) => {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`FullEnrich API ${error.config?.url} responded ${error.response?.status}`);
-      }
-      throw error;
-    });
+  constructor(apiKey: string, http?: AxiosInstance) {
+    // Default to a client with the FullEnrich host, bearer auth and readable
+    // errors; an injected instance (tests) still gets the same error style.
+    this.http = http
+      ? attachErrorInterceptor(http, describeFullEnrichError)
+      : createApiClient({ baseURL: BASE_URL, apiKey, describeError: describeFullEnrichError });
   }
 
   async enrich(input: EnrichInput): Promise<EnrichedContact> {
@@ -114,7 +99,7 @@ export class FullEnrichEnrichment implements EnrichmentPort {
   }
 
   private async poll(id: string, input: EnrichInput): Promise<EnrichedContact | null> {
-    for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
+    for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
       const { data } = await this.http.get(`/contact/enrich/bulk/${id}`);
       const result = ResultSchema.parse(data);
 
@@ -143,6 +128,11 @@ function mapResult(
     mobile: phone?.number ?? "",
     location: phone?.region ?? "",
   };
+}
+
+// Readable, path-aware error (axios's default message drops both).
+function describeFullEnrichError(error: AxiosError): string {
+  return `FullEnrich API ${error.config?.url} responded ${error.response?.status ?? ""}`.trim();
 }
 
 // Real FullEnrich when FULL_ENRICH_API_KEY is set, deterministic fake otherwise
