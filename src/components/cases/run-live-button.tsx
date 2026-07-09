@@ -74,7 +74,7 @@ export function RunLiveButton({ disabled = false }: { disabled?: boolean }) {
       </Button>
 
       <Dialog open={open} onOpenChange={(next) => !run.isPending && setOpen(next)}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[85vh] sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Run the agent on a live signal</DialogTitle>
             <DialogDescription>
@@ -101,7 +101,7 @@ export function RunLiveButton({ disabled = false }: { disabled?: boolean }) {
           )}
 
           {signals.data && signals.data.length > 0 && (
-            <ul className="space-y-2">
+            <ul className="-mr-2 max-h-[60vh] space-y-2 overflow-y-auto pr-2">
               {signals.data.map((signal) => {
                 const running = run.isPending && run.variables === signal.id;
                 return (
