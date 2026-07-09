@@ -32,6 +32,11 @@ drive over MCP) and **conversational** (a bot you can talk to) — not just a UI
   `dispatchEvent` renders one neutral message → fans out to **Slack** (Block Kit) + **email**
   (Resend REST, zero deps, test sender by default). Env-gated per channel, fail-safe, surfaced in
   the sync receipt + toasts (`emailNotified`).
+- **"Ask Re:lay" assistant — voice bubble Tier 1** (9 juil.) — floating chat bubble, Claude
+  (`claude-sonnet-5`) running the Anthropic tool-use loop over the shared registry
+  (`services/relay-tools.ts` — same 7 tools as the MCP, now consumed by both entry points). Tool
+  calls surface as chips; system prompt enforces the confirm-before-approve gate; honest no-op
+  message without `ANTHROPIC_API_KEY`.
 
 ---
 
@@ -223,7 +228,7 @@ voice cloning, 5 languages. Python/Rust SDKs + REST/WS — **no JS SDK**, but it
 browser tokens** so the browser streams over WebSocket _without_ exposing the API key. That shapes the
 build into tiers — ship the cheap one first, each degrades safely:
 
-- **Tier 1 — text bubble _(no Gradium, ~½ day)_**: floating bubble → text chat with Claude wired to
+- ✅ **Tier 1 — text bubble _(shipped 9 juil.)_**: floating bubble → text chat with Claude wired to
   the Re:lay MCP tools. Pure TS. Proves the whole "talk to your pipeline" loop on its own.
 - **Tier 2 — push-to-talk voice _(Gradium REST, +½ day)_**: hold to talk → record → Next route →
   Gradium STT → Claude + MCP → Gradium TTS → play. API key stays server-side. No sidecar.
@@ -278,7 +283,7 @@ for an Anthropic agentic hackathon — the Anthropic swap and the MCP server —
 | 2 ✅  | **MCP server**: read tools (`mcp-handler`)                   | Darren | Low  | runs on fakes               |
 | 3 ✅  | Event dispatcher + re-route Slack through it                 | Darren | Low  | in-app preview              |
 | 4 ✅  | MCP `run_reengagement` + `approve_play` (reuse `decideCase`) | Darren | Med  | runs on fakes               |
-| 5     | **Voice bubble Tier 1** — text chat on the Re:lay MCP tools  | Darren | Low  | runs on fakes               |
+| 5 ✅  | **Voice bubble Tier 1** — text chat on the Re:lay MCP tools  | Darren | Low  | runs on fakes               |
 | 6     | Gamma `ContentPort` + adapter + fake                         | Darren | Med  | instant fake link           |
 | 7 ✅  | Email channel (Resend)                                       | Darren | Low  | in-app preview              |
 | 8     | Join: deck link rides `play_approved` (Slack + email)        | Darren | Med  | —                           |

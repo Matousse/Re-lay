@@ -112,6 +112,10 @@ list → detail → decision screens.
   `/api/mcp` — point Claude at the live deploy and run the whole workflow in natural language.
   `run_reengagement` deliberately stops at the human-review gate; a calling agent proposes, a human
   approves.
+- **"Ask Re:lay" assistant.** A floating chat bubble on every screen: Claude wired to the exact
+  same tool registry the MCP exposes. Ask "which deals are worth reviving?", run the agent, approve
+  a play — in plain language, with every tool call surfaced as a chip in the transcript. Needs
+  `ANTHROPIC_API_KEY`; degrades to an honest hint without it.
 
 ---
 
@@ -241,16 +245,15 @@ proxy origin for HMR in dev.
 
 Re:lay is becoming **one agent with three faces**, all sitting on the same `services/` layer:
 
-| Face                 | Who uses it   | Status  |
-| -------------------- | ------------- | ------- |
-| The **UI**           | humans click  | shipped |
-| The **MCP server**   | other agents  | shipped |
-| The **voice bubble** | humans _talk_ | scoped  |
+| Face                | Who uses it   | Status                      |
+| ------------------- | ------------- | --------------------------- |
+| The **UI**          | humans click  | shipped                     |
+| The **MCP server**  | other agents  | shipped                     |
+| The **chat bubble** | humans _talk_ | shipped (text) — voice next |
 
-Next up: the LLM swap to **Anthropic**, a Slack + email **notification layer**,
-**Gamma**-generated re-engagement decks, and a **Gradium** chat/voice bubble that talks to the
-pipeline (through the MCP tools). Full plan, sequencing, and open questions in
-**[ROADMAP.md](./ROADMAP.md)**.
+All three faces share one tool registry (`services/relay-tools.ts`) — a tool added there ships to
+the MCP and the assistant at once. Next up: **Gamma**-generated re-engagement decks and **Gradium**
+voice on the bubble. Full plan, sequencing, and open questions in **[ROADMAP.md](./ROADMAP.md)**.
 
 ---
 
