@@ -202,7 +202,11 @@ function mapSignalItem({ signal, lead }: SignalItem): Signal | null {
     case "job_posting_keyword_detection": {
       const data = JobPostingDataSchema.safeParse(signal.data);
       const title =
-        (data.success ? (data.data.posting?.title ?? data.data.job_title) : null) ?? "un poste clé";
+        (data.success
+          ? (data.data.posting?.title ??
+            data.data.job_title ??
+            titleFromJobUrl(data.data.posting?.job_url))
+          : null) ?? "un poste clé";
       return SignalSchema.parse({
         ...base,
         type: "job_posting",
@@ -261,7 +265,11 @@ function mapDetection(
     case "jobPostingKeywordDetection": {
       const data = JobPostingDataSchema.safeParse(detection.data);
       const title =
-        (data.success ? (data.data.posting?.title ?? data.data.job_title) : null) ?? "un poste clé";
+        (data.success
+          ? (data.data.posting?.title ??
+            data.data.job_title ??
+            titleFromJobUrl(data.data.posting?.job_url))
+          : null) ?? "un poste clé";
       return SignalSchema.parse({
         ...base,
         type: "job_posting",
@@ -302,6 +310,28 @@ function companyFromJobUrl(url: string): string | null {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
   return name || null;
+}
+
+// The job title is the slug before "-at-" in a LinkedIn job URL
+// ("…/jobs/view/<title>-at-<company>-<id>"). Used when the posting payload
+// carries no explicit title, so a hiring signal reads as the actual role
+// ("Senior Product Manager") rather than a generic placeholder.
+export function titleFromJobUrl(url?: string | null): string | null {
+  if (!url) return null;
+  const match = /\/jobs\/view\/(.+?)-at-/i.exec(url);
+  if (!match) return null;
+  let slug = match[1];
+  try {
+    slug = decodeURIComponent(slug);
+  } catch {
+    // Keep the raw slug if it isn't valid percent-encoding.
+  }
+  const words = slug
+    .split("-")
+    .map((word) => word.replace(/[^\p{L}\p{N}]/gu, "")) // drop emojis / stray punctuation
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1));
+  return words.length ? words.join(" ") : null;
 }
 
 // With no key the workspace is simply unavailable — the app surfaces no

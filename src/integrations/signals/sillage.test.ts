@@ -1,7 +1,11 @@
 import axios, { type AxiosInstance } from "axios";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sillageHttp } from "@/integrations/signals/http";
-import { makeSignalSource, SillageSignalSource } from "@/integrations/signals/sillage";
+import {
+  makeSignalSource,
+  SillageSignalSource,
+  titleFromJobUrl,
+} from "@/integrations/signals/sillage";
 
 // Fixtures mirror the real Sillage API v1 shape: GET /workspace/signals returns
 // each detection with its `signal` plus the `lead` and their `current_company`
@@ -219,5 +223,33 @@ describe("makeSignalSource", () => {
     expect(offline).not.toBeInstanceOf(SillageSignalSource);
     expect(await offline.list()).toEqual([]);
     expect(await offline.getById("slg-anything")).toBeNull();
+  });
+});
+
+describe("titleFromJobUrl", () => {
+  it("extracts and prettifies the role from a LinkedIn job URL", () => {
+    expect(
+      titleFromJobUrl(
+        "https://fr.linkedin.com/jobs/view/financial-risk-manager-at-qonto-4400272272",
+      ),
+    ).toBe("Financial Risk Manager");
+    expect(
+      titleFromJobUrl(
+        "https://fr.linkedin.com/jobs/view/senior-staff-sap-engineer-at-qonto-4411228793",
+      ),
+    ).toBe("Senior Staff Sap Engineer");
+  });
+
+  it("decodes percent-encoding and drops emojis", () => {
+    expect(
+      titleFromJobUrl(
+        "https://de.linkedin.com/jobs/view/senior-product-manager-german-speaking-%F0%9F%87%A9%F0%9F%87%AA-at-qonto-4430705695",
+      ),
+    ).toBe("Senior Product Manager German Speaking");
+  });
+
+  it("returns null when there is no parseable title", () => {
+    expect(titleFromJobUrl(undefined)).toBeNull();
+    expect(titleFromJobUrl("https://example.com/careers")).toBeNull();
   });
 });
