@@ -3,6 +3,7 @@ import Image from "next/image";
 import { KeyRound, Plug, Sparkles } from "lucide-react";
 import { ConnectDialog } from "@/components/connectors/connect-dialog";
 import { RefreshHubspotButton } from "@/components/connectors/refresh-hubspot-button";
+import { SillageConnectDialog } from "@/components/connectors/sillage-connect-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CONNECTOR_LOGOS, PLATFORM_LOGOS } from "@/lib/logos";
@@ -218,11 +219,15 @@ export default async function IntegrationsPage() {
                       <p className="text-muted-foreground text-xs">
                         Connect to bring Re:lay online.
                       </p>
-                      <ConnectDialog
-                        id={integration.id}
-                        name={integration.name}
-                        successDetail={integration.successDetail}
-                      />
+                      {integration.id === "sillage" ? (
+                        <SillageConnectDialog />
+                      ) : (
+                        <ConnectDialog
+                          id={integration.id}
+                          name={integration.name}
+                          successDetail={integration.successDetail}
+                        />
+                      )}
                     </div>
                   )}
                 </div>

@@ -17,3 +17,21 @@ it("enregistre contact et note en écriture", async () => {
   await crm.writeNote("acc_1", "relance envoyée");
   expect(crm.writtenNotes).toContainEqual({ accountId: "acc_1", text: "relance envoyée" });
 });
+
+it("liste uniquement les comptes perdus qui portent un domaine", async () => {
+  const crm = new FakeCrm();
+  const accounts = await crm.listClosedLostAccounts();
+
+  // Acme/Qonto sont perdus mais sans domaine → exclus ; Globex est actif → exclu.
+  expect(accounts.every((account) => account.domain.length > 0)).toBe(true);
+  expect(accounts.map((account) => account.company)).not.toContain("Acme");
+  expect(accounts.map((account) => account.company)).not.toContain("Globex");
+
+  const kerneos = accounts.find((account) => account.company === "Kerneos Analytics");
+  expect(kerneos?.domain).toBe("kerneos.io");
+  expect(kerneos?.contacts[0]).toEqual({
+    name: "Claire Fontaine",
+    jobTitle: "CMO",
+    location: "France",
+  });
+});

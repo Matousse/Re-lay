@@ -30,6 +30,28 @@ export const AccountSchema = z.object({
 });
 export type Account = z.infer<typeof AccountSchema>;
 
+// A person who owned a closed-lost deal — the raw material the Sillage persona
+// is derived from (title → job_title[], location → location[]).
+export const ClosedLostContactSchema = z.object({
+  name: z.string(),
+  jobTitle: z.string(),
+  location: z.string(),
+});
+export type ClosedLostContact = z.infer<typeof ClosedLostContactSchema>;
+
+// One closed-lost account, flattened for the Sillage sync: the company domain
+// (Sillage's preferred identifier) plus the contacts who owned the deal. Distinct
+// from Account — it carries the domain/contacts the pipeline's Account omits.
+export const ClosedLostAccountSchema = z.object({
+  id: z.string(),
+  company: z.string(),
+  domain: z.string(),
+  amount: z.number().nullable(),
+  lossReason: z.string().nullable(),
+  contacts: z.array(ClosedLostContactSchema),
+});
+export type ClosedLostAccount = z.infer<typeof ClosedLostAccountSchema>;
+
 export const LossAnalysisSchema = z.object({
   rootCause: z.string(),
   evidence: z.array(z.string()),

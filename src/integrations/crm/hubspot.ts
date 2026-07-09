@@ -1,8 +1,11 @@
 import { Client } from "@hubspot/api-client";
 import {
   AccountSchema,
+  ClosedLostAccountSchema,
   NoteSchema,
   type Account,
+  type ClosedLostAccount,
+  type ClosedLostContact,
   type EnrichedContact,
   type Note,
 } from "@/types/pipeline";
@@ -21,6 +24,17 @@ const PAGE_LIMIT = 100;
 // Standard, portal-default properties — safe to request without a 400.
 const DEAL_PROPERTIES = ["hs_is_closed", "hs_is_closed_won", "closedate", "closed_lost_reason"];
 const NOTE_PROPERTIES = ["hs_note_body", "hs_timestamp"];
+const CONTACT_PROPERTIES = ["firstname", "lastname", "jobtitle", "city", "country"];
+const CLOSED_LOST_FILTERS = [
+  { propertyName: "hs_is_closed", operator: "EQ" as never, value: "true" },
+  { propertyName: "hs_is_closed_won", operator: "EQ" as never, value: "false" },
+];
+
+// A closed-lost deal reduced to what the Sillage sync needs, plus which company
+// and contacts it links to (resolved in a second pass).
+type DealFacts = { id: string; amount: number | null; lossReason: string | null };
+type DealLinks = { dealId: string; companyId?: string; contactIds: string[] };
+type CompanyFacts = { name: string; domain: string | null; contactIds: string[] };
 
 // Derive the exact search-request type from the SDK instead of importing the
 // internal FilterOperatorEnum (a deep, version-fragile path).
@@ -73,6 +87,33 @@ export class HubSpotCrm implements CrmPort {
     );
     const noteIds = uniq(withAssociations.associations?.notes?.results.map((r) => r.id));
     return this.readNotes(noteIds);
+  }
+
+  // The revival pool: every closed-lost deal, grouped by its company, keeping
+  // only companies that carry a domain. Deal search gives the money + loss
+  // reason; a per-deal association read links each to its company and contacts,
+  // then two batch reads resolve the company domain and the contacts' titles and
+  // locations. First-page only (PAGE_LIMIT deals), same as the rest of this port.
+  async listClosedLostAccounts(): Promise<ClosedLostAccount[]> {
+    const deals = await this.searchClosedLostDeals();
+    if (deals.length === 0) return [];
+
+    const links = await this.readDealLinks(deals.map((deal) => deal.id));
+    const companyIds = uniq(
+      links.map((link) => link.companyId).filter((id): id is string => Boolean(id)),
+    );
+    const companies = await this.readCompanyDetails(companyIds);
+
+    // Contacts live on the company as often as on the deal — union both, so the
+    // persona is derived from real people even in portals that only associate
+    // contacts to companies (which is why a deal-only read came back empty).
+    const contactIds = uniq([
+      ...links.flatMap((link) => link.contactIds),
+      ...[...companies.values()].flatMap((company) => company.contactIds),
+    ]);
+    const contacts = await this.readContacts(contactIds);
+
+    return groupByCompany(deals, links, companies, contacts);
   }
 
   async writeContact(accountId: string, contact: EnrichedContact): Promise<void> {
@@ -206,6 +247,84 @@ export class HubSpotCrm implements CrmPort {
 
     return NoteSchema.array().parse(notes);
   }
+
+  private async searchClosedLostDeals(): Promise<DealFacts[]> {
+    const request: CompanySearchRequest = {
+      filterGroups: [{ filters: CLOSED_LOST_FILTERS }],
+      properties: ["amount", "closed_lost_reason"],
+      limit: PAGE_LIMIT,
+    };
+    const result = await this.client.crm.deals.searchApi.doSearch(request);
+    return result.results.map((deal) => ({
+      id: deal.id,
+      amount: toAmount(deal.properties.amount),
+      lossReason: deal.properties.closed_lost_reason ?? null,
+    }));
+  }
+
+  private async readDealLinks(dealIds: string[]): Promise<DealLinks[]> {
+    return Promise.all(
+      dealIds.map(async (dealId) => {
+        const deal = await this.client.crm.deals.basicApi.getById(dealId, undefined, undefined, [
+          "companies",
+          "contacts",
+        ]);
+        return {
+          dealId,
+          companyId: deal.associations?.companies?.results[0]?.id,
+          contactIds: uniq(deal.associations?.contacts?.results.map((r) => r.id)),
+        };
+      }),
+    );
+  }
+
+  // Per-company (not batch) so we can pull the company's associated contacts in
+  // the same call — batchApi.read returns properties but no associations.
+  private async readCompanyDetails(ids: string[]): Promise<Map<string, CompanyFacts>> {
+    if (ids.length === 0) return new Map();
+    const companies = await Promise.all(
+      ids.map(async (id) => {
+        const company = await this.client.crm.companies.basicApi.getById(
+          id,
+          ["name", "domain"],
+          undefined,
+          ["contacts"],
+        );
+        return [
+          id,
+          {
+            name: company.properties.name ?? "",
+            domain: company.properties.domain ?? null,
+            contactIds: uniq(company.associations?.contacts?.results.map((r) => r.id)),
+          },
+        ] as const;
+      }),
+    );
+    return new Map(companies);
+  }
+
+  private async readContacts(ids: string[]): Promise<Map<string, ClosedLostContact>> {
+    if (ids.length === 0) return new Map();
+    const batch = await this.client.crm.contacts.batchApi.read({
+      inputs: ids.map((id) => ({ id })),
+      properties: CONTACT_PROPERTIES,
+      propertiesWithHistory: [],
+    });
+    return new Map(
+      batch.results.map((contact) => {
+        const props = contact.properties;
+        const name = [props.firstname, props.lastname].filter(Boolean).join(" ").trim();
+        return [
+          contact.id,
+          {
+            name: name || "Contact",
+            jobTitle: props.jobtitle ?? "",
+            location: formatLocation(props.city, props.country),
+          },
+        ];
+      }),
+    );
+  }
 }
 
 // Lightweight liveness probe for the real portal: one authenticated search
@@ -260,6 +379,62 @@ export async function verifyHubSpotConnection(
 
 function uniq(ids: string[] | undefined): string[] {
   return [...new Set(ids ?? [])];
+}
+
+// One account per company with a domain (Sillage resolves poorly on names). Its
+// contacts are the union of the company's own contacts and those on its lost
+// deals; its money/reason come from one of those deals.
+function groupByCompany(
+  deals: DealFacts[],
+  links: DealLinks[],
+  companies: Map<string, CompanyFacts>,
+  contacts: Map<string, ClosedLostContact>,
+): ClosedLostAccount[] {
+  const dealById = new Map(deals.map((deal) => [deal.id, deal]));
+  const accounts: ClosedLostAccount[] = [];
+
+  for (const [companyId, company] of companies) {
+    if (!company.domain) continue;
+
+    const companyLinks = links.filter((link) => link.companyId === companyId);
+    const contactIds = new Set(company.contactIds);
+    for (const link of companyLinks) for (const id of link.contactIds) contactIds.add(id);
+
+    const deal = companyLinks.map((link) => dealById.get(link.dealId)).find(Boolean);
+    const accountContacts = [...contactIds]
+      .map((id) => contacts.get(id))
+      .filter((contact): contact is ClosedLostContact => Boolean(contact));
+
+    accounts.push(
+      ClosedLostAccountSchema.parse({
+        id: companyId,
+        company: company.name || company.domain,
+        domain: company.domain,
+        amount: deal?.amount ?? null,
+        lossReason: deal?.lossReason ?? null,
+        contacts: dedupeContacts(accountContacts),
+      }),
+    );
+  }
+
+  return accounts;
+}
+
+function dedupeContacts(contacts: ClosedLostContact[]): ClosedLostContact[] {
+  const seen = new Map<string, ClosedLostContact>();
+  for (const contact of contacts) seen.set(`${contact.name}|${contact.jobTitle}`, contact);
+  return [...seen.values()];
+}
+
+function formatLocation(city?: string | null, country?: string | null): string {
+  return [city, country].filter(Boolean).join(", ");
+}
+
+// HubSpot amounts come back as strings; the persona/summary want a number.
+function toAmount(raw?: string | null): number | null {
+  if (!raw) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
 }
 
 // HubSpot note bodies are rich text (HTML); the pipeline wants plain text.
