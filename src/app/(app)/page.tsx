@@ -2,6 +2,7 @@ import { AnimatedNumber } from "@/components/animated-number";
 import { AgentRunDialog } from "@/components/cases/agent-run-dialog";
 import { CasesTable } from "@/components/cases/cases-table";
 import { ResetDemoButton } from "@/components/cases/reset-demo-button";
+import { RunLiveButton } from "@/components/cases/run-live-button";
 import { RoiProjection } from "@/components/cases/roi-projection";
 import { SetupBanner } from "@/components/connectors/setup-banner";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
@@ -30,7 +31,10 @@ export default async function Home() {
             re-engage.
           </p>
         </div>
-        <AgentRunDialog disabled={setupNeeded} />
+        <div className="flex items-center gap-2">
+          <RunLiveButton disabled={setupNeeded} />
+          <AgentRunDialog disabled={setupNeeded} />
+        </div>
       </div>
 
       {setupNeeded && (

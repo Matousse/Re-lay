@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Command } from "@langchain/langgraph";
-import { FakeCrm } from "@/integrations/crm/fake";
+import { makeCrm } from "@/integrations/crm/factory";
 import { FakeEnrichment } from "@/integrations/enrichment/fake";
 import { makeAnthropicClient } from "@/integrations/llm/client";
 import { FakeLlm } from "@/integrations/llm/fake";
@@ -35,7 +35,7 @@ type InterruptedState = PipelineStateType & { __interrupt__?: Array<{ value: unk
 
 function defaultDeps(): BridgeDeps {
   return {
-    crm: new FakeCrm(),
+    crm: makeCrm(),
     enrichment: new FakeEnrichment(),
     // Real Claude when ANTHROPIC_API_KEY is set, deterministic fake otherwise.
     llm: env.ANTHROPIC_API_KEY ? makeAnthropicClient() : new FakeLlm(),

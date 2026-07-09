@@ -61,6 +61,41 @@ const DEAL_FACTS: Record<
     industry: "Logistics",
     previousContact: { name: "Alex Munoz", role: "VP Ops" },
   },
+  "Kerneos Analytics": {
+    amount: 86_400,
+    industry: "Data & Analytics",
+    previousContact: { name: "Claire Fontaine", role: "CMO" },
+  },
+  Wattly: {
+    amount: 48_000,
+    industry: "Energy / IoT",
+    previousContact: { name: "Igor Melnik", role: "VP Operations" },
+  },
+  Meridiem: {
+    amount: 72_000,
+    industry: "Fintech",
+    previousContact: { name: "Sofia Andrade", role: "Head of RevOps" },
+  },
+  Altiflow: {
+    amount: 39_500,
+    industry: "Logistics",
+    previousContact: { name: "Marc Vidal", role: "CRO" },
+  },
+  "Toundra Studio": {
+    amount: 18_000,
+    industry: "Creative SaaS",
+    previousContact: { name: "Jeanne Okafor", role: "Co-founder & COO" },
+  },
+  Brioz: {
+    amount: 25_000,
+    industry: "Retail",
+    previousContact: { name: "Paul Lemaire", role: "CFO" },
+  },
+  "Oberon Systems": {
+    amount: 120_000,
+    industry: "Cybersecurity",
+    previousContact: { name: "Hugo Steiner", role: "Head of Sales Ops" },
+  },
 };
 
 function fallbackDealFacts(company: string) {
