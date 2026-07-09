@@ -1,28 +1,28 @@
 import { FakeCrm } from "@/integrations/crm/fake";
 
-it("trouve un compte perdu par entreprise", async () => {
+it("finds a lost account by company", async () => {
   const crm = new FakeCrm();
   const account = await crm.findAccountByCompany("Acme");
   expect(account?.status).toBe("lost");
   expect(account?.notes.length).toBeGreaterThan(0);
 });
 
-it("renvoie null pour une entreprise inconnue", async () => {
+it("returns null for an unknown company", async () => {
   const crm = new FakeCrm();
   expect(await crm.findAccountByCompany("Nope")).toBeNull();
 });
 
-it("enregistre contact et note en écriture", async () => {
+it("records a written note", async () => {
   const crm = new FakeCrm();
   await crm.writeNote("acc_1", "relance envoyée");
   expect(crm.writtenNotes).toContainEqual({ accountId: "acc_1", text: "relance envoyée" });
 });
 
-it("liste uniquement les comptes perdus qui portent un domaine", async () => {
+it("lists only lost accounts that carry a domain", async () => {
   const crm = new FakeCrm();
   const accounts = await crm.listClosedLostAccounts();
 
-  // Acme/Qonto sont perdus mais sans domaine → exclus ; Globex est actif → exclu.
+  // Acme/Qonto are lost but domainless → excluded; Globex is active → excluded.
   expect(accounts.every((account) => account.domain.length > 0)).toBe(true);
   expect(accounts.map((account) => account.company)).not.toContain("Acme");
   expect(accounts.map((account) => account.company)).not.toContain("Globex");

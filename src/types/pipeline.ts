@@ -10,9 +10,9 @@ export type Note = z.infer<typeof NoteSchema>;
 export const SignalSchema = z.object({
   id: z.string(),
   company: z.string(),
-  // Aligné sur les détections de l'API Sillage v2 : new_decision_maker ←
-  // newJob/recentlyPromoted, funding ← keywordDetection (mots-clés levée),
-  // job_posting ← jobPosting*. site_revisit reste couvert par le fake.
+  // Aligned with the Sillage API v2 detections: new_decision_maker ←
+  // newJob/recentlyPromoted, funding ← keywordDetection (funding keywords),
+  // job_posting ← jobPosting*. site_revisit stays covered by the fake.
   type: z.enum(["new_decision_maker", "funding", "site_revisit", "job_posting"]),
   detail: z.string(),
   personName: z.string().optional(),
@@ -82,7 +82,7 @@ export const HumanDecisionSchema = z.discriminatedUnion("type", [
 ]);
 export type HumanDecision = z.infer<typeof HumanDecisionSchema>;
 
-// Frontières HTTP
+// HTTP boundaries
 export const StartPipelineInputSchema = z.object({ signalId: z.string().min(1) });
 export const ResumePipelineInputSchema = z.object({
   threadId: z.string().min(1),
