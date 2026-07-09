@@ -1,4 +1,5 @@
 import { Client } from "@hubspot/api-client";
+import { mapWithConcurrency, withRetry } from "@/lib/async";
 import {
   AccountSchema,
   ClosedLostAccountSchema,
@@ -21,13 +22,33 @@ import type { CrmPort } from "@/integrations/crm/port";
 
 const PAGE_LIMIT = 100;
 
+// Cap concurrent HubSpot reads. The per-deal and per-company detail lookups fan
+// out, and firing them all at once (a bare Promise.all) would burst past
+// HubSpot's rate limit on a large portal. A small pool keeps us under it;
+// withRetry rides out the occasional 429.
+const READ_CONCURRENCY = 5;
+
+// Derive the search-request shape — and its nested filter — from the SDK instead
+// of importing the internal FilterOperatorEnum (a deep, version-fragile path).
+type CompanySearchRequest = Parameters<Client["crm"]["companies"]["searchApi"]["doSearch"]>[0];
+type SearchFilter = NonNullable<CompanySearchRequest["filterGroups"]>[number]["filters"][number];
+
+// The comparison operators Re:lay actually uses, typed locally so a typo is a
+// compile error — without pulling in the SDK's fragile enum path. The single
+// cast is contained here rather than sprinkled as `as never` at every call site.
+type FilterOperator = "EQ" | "NEQ" | "GT" | "GTE" | "LT" | "LTE" | "HAS_PROPERTY";
+
+function searchFilter(propertyName: string, operator: FilterOperator, value: string): SearchFilter {
+  return { propertyName, operator, value } as SearchFilter;
+}
+
 // Standard, portal-default properties — safe to request without a 400.
 const DEAL_PROPERTIES = ["hs_is_closed", "hs_is_closed_won", "closedate", "closed_lost_reason"];
 const NOTE_PROPERTIES = ["hs_note_body", "hs_timestamp"];
 const CONTACT_PROPERTIES = ["firstname", "lastname", "jobtitle", "city", "country"];
 const CLOSED_LOST_FILTERS = [
-  { propertyName: "hs_is_closed", operator: "EQ" as never, value: "true" },
-  { propertyName: "hs_is_closed_won", operator: "EQ" as never, value: "false" },
+  searchFilter("hs_is_closed", "EQ", "true"),
+  searchFilter("hs_is_closed_won", "EQ", "false"),
 ];
 
 // A closed-lost deal reduced to what the Sillage sync needs, plus which company
@@ -35,10 +56,6 @@ const CLOSED_LOST_FILTERS = [
 type DealFacts = { id: string; amount: number | null; lossReason: string | null };
 type DealLinks = { dealId: string; companyId?: string; contactIds: string[] };
 type CompanyFacts = { name: string; domain: string | null; contactIds: string[] };
-
-// Derive the exact search-request type from the SDK instead of importing the
-// internal FilterOperatorEnum (a deep, version-fragile path).
-type CompanySearchRequest = Parameters<Client["crm"]["companies"]["searchApi"]["doSearch"]>[0];
 
 export class HubSpotCrm implements CrmPort {
   private client: Client;
@@ -164,9 +181,7 @@ export class HubSpotCrm implements CrmPort {
 
   private async searchCompanyId(company: string): Promise<string | null> {
     const request: CompanySearchRequest = {
-      filterGroups: [
-        { filters: [{ propertyName: "name", operator: "EQ" as never, value: company }] },
-      ],
+      filterGroups: [{ filters: [searchFilter("name", "EQ", company)] }],
       properties: ["name"],
       limit: 1,
     };
@@ -176,9 +191,7 @@ export class HubSpotCrm implements CrmPort {
 
   private async findContactIdByEmail(email: string): Promise<string | null> {
     const request: CompanySearchRequest = {
-      filterGroups: [
-        { filters: [{ propertyName: "email", operator: "EQ" as never, value: email }] },
-      ],
+      filterGroups: [{ filters: [searchFilter("email", "EQ", email)] }],
       properties: ["email"],
       limit: 1,
     };
@@ -263,43 +276,38 @@ export class HubSpotCrm implements CrmPort {
   }
 
   private async readDealLinks(dealIds: string[]): Promise<DealLinks[]> {
-    return Promise.all(
-      dealIds.map(async (dealId) => {
-        const deal = await this.client.crm.deals.basicApi.getById(dealId, undefined, undefined, [
+    return mapWithConcurrency(dealIds, READ_CONCURRENCY, async (dealId) => {
+      const deal = await withRetry(() =>
+        this.client.crm.deals.basicApi.getById(dealId, undefined, undefined, [
           "companies",
           "contacts",
-        ]);
-        return {
-          dealId,
-          companyId: deal.associations?.companies?.results[0]?.id,
-          contactIds: uniq(deal.associations?.contacts?.results.map((r) => r.id)),
-        };
-      }),
-    );
+        ]),
+      );
+      return {
+        dealId,
+        companyId: deal.associations?.companies?.results[0]?.id,
+        contactIds: uniq(deal.associations?.contacts?.results.map((r) => r.id)),
+      };
+    });
   }
 
   // Per-company (not batch) so we can pull the company's associated contacts in
   // the same call — batchApi.read returns properties but no associations.
   private async readCompanyDetails(ids: string[]): Promise<Map<string, CompanyFacts>> {
     if (ids.length === 0) return new Map();
-    const companies = await Promise.all(
-      ids.map(async (id) => {
-        const company = await this.client.crm.companies.basicApi.getById(
-          id,
-          ["name", "domain"],
-          undefined,
-          ["contacts"],
-        );
-        return [
-          id,
-          {
-            name: company.properties.name ?? "",
-            domain: company.properties.domain ?? null,
-            contactIds: uniq(company.associations?.contacts?.results.map((r) => r.id)),
-          },
-        ] as const;
-      }),
-    );
+    const companies = await mapWithConcurrency(ids, READ_CONCURRENCY, async (id) => {
+      const company = await withRetry(() =>
+        this.client.crm.companies.basicApi.getById(id, ["name", "domain"], undefined, ["contacts"]),
+      );
+      return [
+        id,
+        {
+          name: company.properties.name ?? "",
+          domain: company.properties.domain ?? null,
+          contactIds: uniq(company.associations?.contacts?.results.map((r) => r.id)),
+        },
+      ] as const;
+    });
     return new Map(companies);
   }
 
@@ -347,14 +355,7 @@ export async function verifyHubSpotConnection(
       }),
       // Closed-lost deals = the revivable pool Re:lay works on.
       client.crm.deals.searchApi.doSearch({
-        filterGroups: [
-          {
-            filters: [
-              { propertyName: "hs_is_closed", operator: "EQ" as never, value: "true" },
-              { propertyName: "hs_is_closed_won", operator: "EQ" as never, value: "false" },
-            ],
-          },
-        ],
+        filterGroups: [{ filters: CLOSED_LOST_FILTERS }],
         properties: ["dealname"],
         limit: 1,
       }),
