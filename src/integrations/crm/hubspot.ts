@@ -1,5 +1,6 @@
 import { Client } from "@hubspot/api-client";
 import { mapWithConcurrency, withRetry } from "@/lib/async";
+import { normalizeCompanyName } from "@/lib/company";
 import {
   AccountSchema,
   ClosedLostAccountSchema,
@@ -36,7 +37,8 @@ type SearchFilter = NonNullable<CompanySearchRequest["filterGroups"]>[number]["f
 // The comparison operators Re:lay actually uses, typed locally so a typo is a
 // compile error — without pulling in the SDK's fragile enum path. The single
 // cast is contained here rather than sprinkled as `as never` at every call site.
-type FilterOperator = "EQ" | "NEQ" | "GT" | "GTE" | "LT" | "LTE" | "HAS_PROPERTY";
+type FilterOperator =
+  "EQ" | "NEQ" | "GT" | "GTE" | "LT" | "LTE" | "HAS_PROPERTY" | "CONTAINS_TOKEN";
 
 function searchFilter(propertyName: string, operator: FilterOperator, value: string): SearchFilter {
   return { propertyName, operator, value } as SearchFilter;
@@ -180,13 +182,33 @@ export class HubSpotCrm implements CrmPort {
   }
 
   private async searchCompanyId(company: string): Promise<string | null> {
-    const request: CompanySearchRequest = {
+    // Fast path: exact name.
+    const exact = await this.client.crm.companies.searchApi.doSearch({
       filterGroups: [{ filters: [searchFilter("name", "EQ", company)] }],
       properties: ["name"],
       limit: 1,
-    };
-    const result = await this.client.crm.companies.searchApi.doSearch(request);
-    return result.results[0]?.id ?? null;
+    });
+    if (exact.results[0]) return exact.results[0].id;
+    return this.searchCompanyIdFuzzy(company);
+  }
+
+  // Exact search misses on case / legal-suffix variants ("Qonto" vs "Qonto SAS").
+  // Broaden on the first normalized token, then keep only the candidate whose
+  // normalized name equals the target — never a loose partial, so a signal is
+  // never matched to the wrong lost account.
+  private async searchCompanyIdFuzzy(company: string): Promise<string | null> {
+    const target = normalizeCompanyName(company);
+    const token = target.split(" ")[0];
+    if (!token) return null;
+    const result = await this.client.crm.companies.searchApi.doSearch({
+      filterGroups: [{ filters: [searchFilter("name", "CONTAINS_TOKEN", token)] }],
+      properties: ["name"],
+      limit: 10,
+    });
+    const match = result.results.find(
+      (r) => normalizeCompanyName(r.properties.name ?? "") === target,
+    );
+    return match?.id ?? null;
   }
 
   private async findContactIdByEmail(email: string): Promise<string | null> {

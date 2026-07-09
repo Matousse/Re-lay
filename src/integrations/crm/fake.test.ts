@@ -12,6 +12,14 @@ it("returns null for an unknown company", async () => {
   expect(await crm.findAccountByCompany("Nope")).toBeNull();
 });
 
+it("resolves a lost account by a fuzzy company name (case / legal suffix)", async () => {
+  const crm = new FakeCrm();
+  // A real Sillage signal spells the company differently from the CRM's record.
+  expect((await crm.findAccountByCompany("QONTO SAS"))?.company).toBe("Qonto");
+  expect((await crm.findAccountByCompany("kerneos analytics"))?.company).toBe("Kerneos Analytics");
+  expect(await crm.findAccountByCompany("Totally Unknown Co")).toBeNull();
+});
+
 it("records a written note", async () => {
   const crm = new FakeCrm();
   await crm.writeNote("acc_1", "relance envoyée");

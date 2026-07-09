@@ -1,3 +1,4 @@
+import { normalizeCompanyName } from "@/lib/company";
 import {
   ClosedLostAccountSchema,
   type Account,
@@ -25,7 +26,12 @@ export class FakeCrm implements CrmPort {
   writtenNotes: { accountId: string; text: string }[] = [];
 
   async findAccountByCompany(company: string): Promise<Account | null> {
-    return this.accounts.find((a) => a.company === company) ?? null;
+    const exact = this.accounts.find((a) => a.company === company);
+    if (exact) return exact;
+    // Signals name companies as free text; fall back to a normalized match so a
+    // "Qonto SAS"/"qonto" signal still resolves the seeded "Qonto" account.
+    const target = normalizeCompanyName(company);
+    return this.accounts.find((a) => normalizeCompanyName(a.company) === target) ?? null;
   }
   async getHistory(accountId: string): Promise<Note[]> {
     return this.accounts.find((a) => a.id === accountId)?.notes ?? [];
