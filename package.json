@@ -18,7 +18,7 @@
     "test:run": "vitest run",
     "seed:hubspot": "node --env-file=.env script/seed-hubspot.mjs",
     "hubspot:check": "node --env-file=.env script/check-hubspot.mjs",
-    "prepare": "husky",
+    "prepare": "node .husky/install.mjs",
     "setup": "./script/setup.sh"
   },
   "dependencies": {
