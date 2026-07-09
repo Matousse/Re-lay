@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance } from "axios";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { sillageHttp } from "@/integrations/signals/http";
 import { makeSignalSource, SillageSignalSource } from "@/integrations/signals/sillage";
 
 // Fixtures mirror the real Sillage API v1 shape: GET /workspace/signals returns
@@ -142,9 +143,9 @@ describe("SillageSignalSource", () => {
   });
 
   it("throws a readable, path-aware error on non-2xx responses", async () => {
-    // A real axios instance whose adapter always 401s, so the production
-    // response interceptor the source registers is what rewrites the error.
-    const http = axios.create({ baseURL: "https://api.getsillage.com/api" });
+    // The production factory's instance with an adapter that always 401s, so
+    // the shared response interceptor is what rewrites the error.
+    const http = sillageHttp("demo-key-bad");
     http.defaults.adapter = async (config) => {
       throw new axios.AxiosError(
         "Request failed with status code 401",
