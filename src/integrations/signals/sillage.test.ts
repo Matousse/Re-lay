@@ -160,6 +160,56 @@ describe("SillageSignalSource", () => {
   });
 });
 
+describe("SillageSignalSource — v2 fallback", () => {
+  // The live hackathon workspace: v1 feed empty, detections only in v2.
+  const EMPTY_V1 = {
+    data: [],
+    meta: { pagination: { page: 1, pageSize: 100, pageCount: 0, total: 0 } },
+  };
+  const V2_DETECTIONS = {
+    data: [
+      {
+        id: 9001,
+        signal_type: "jobPostingKeywordDetection",
+        data: {
+          keywords_found: ["AI"],
+          posting: {
+            title: "Financial Risk Manager",
+            job_url: "https://fr.linkedin.com/jobs/view/financial-risk-manager-at-qonto-4400272272",
+          },
+        },
+        lead_id: null,
+        company_id: 129589,
+      },
+    ],
+  };
+
+  function fallbackHttp() {
+    return {
+      get: vi.fn(async (url: string) => {
+        if (url.includes("/v1/workspace/signals")) return { data: EMPTY_V1 };
+        if (url.includes("/v1/workspace/leads")) return { data: { data: [] } };
+        if (url.includes("/v2/top-account-list/accounts")) return { data: { data: [] } };
+        throw new Error(`Sillage API ${url} responded 404`);
+      }),
+      post: vi.fn(async (url: string) => {
+        if (url.includes("/v2/workspace/signals/query")) return { data: V2_DETECTIONS };
+        throw new Error(`Sillage API ${url} responded 404`);
+      }),
+      interceptors: { response: { use: vi.fn() } },
+    } as unknown as AxiosInstance;
+  }
+
+  it("falls back to the v2 query when the v1 feed is empty, naming companies from the job URL", async () => {
+    const source = new SillageSignalSource("demo-key-ok", fallbackHttp());
+    const signals = await source.list();
+
+    expect(signals).toHaveLength(1);
+    expect(signals[0]).toMatchObject({ id: "slg-9001", company: "Qonto", type: "job_posting" });
+    expect(signals[0].detail).toContain("Financial Risk Manager");
+  });
+});
+
 describe("makeSignalSource", () => {
   it("returns the real source with a key, an empty offline source without", async () => {
     expect(makeSignalSource("demo-key-ok")).toBeInstanceOf(SillageSignalSource);
