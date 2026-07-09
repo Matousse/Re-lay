@@ -7,6 +7,9 @@ import { z } from "zod";
 const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   SILLAGE_API_KEY: z.string().min(1).optional(),
+  // FullEnrich API key. Set it and `researcher` resolves verified emails/phones
+  // via the real API; unset, it falls back to the deterministic fake contact.
+  FULL_ENRICH_API_KEY: z.string().min(1).optional(),
   // Slack incoming-webhook URL. Set it and every approval posts to the channel;
   // unset, the approval flow just skips the notification.
   SLACK_WEBHOOK_URL: z.url().optional(),
@@ -23,6 +26,7 @@ const envSchema = z.object({
 export const env = envSchema.parse({
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   SILLAGE_API_KEY: process.env.SILLAGE_API_KEY,
+  FULL_ENRICH_API_KEY: process.env.FULL_ENRICH_API_KEY,
   SLACK_WEBHOOK_URL: process.env.SLACK_WEBHOOK_URL,
   ASSISTANT_MODEL: process.env.ASSISTANT_MODEL,
   RESEND_API_KEY: process.env.RESEND_API_KEY,

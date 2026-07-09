@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Command } from "@langchain/langgraph";
 import { FakeCrm } from "@/integrations/crm/fake";
-import { FakeEnrichment } from "@/integrations/enrichment/fake";
+import { makeEnrichment } from "@/integrations/enrichment/fullenrich";
 import { makeAnthropicClient } from "@/integrations/llm/client";
 import { FakeLlm } from "@/integrations/llm/fake";
 import { makeSignalSource } from "@/integrations/signals/sillage";
@@ -36,7 +36,8 @@ type InterruptedState = PipelineStateType & { __interrupt__?: Array<{ value: unk
 function defaultDeps(): BridgeDeps {
   return {
     crm: new FakeCrm(),
-    enrichment: new FakeEnrichment(),
+    // Real FullEnrich when FULL_ENRICH_API_KEY is set, fake otherwise.
+    enrichment: makeEnrichment(),
     // Real Claude when ANTHROPIC_API_KEY is set, deterministic fake otherwise.
     llm: env.ANTHROPIC_API_KEY ? makeAnthropicClient() : new FakeLlm(),
     // Real Sillage workspace when SILLAGE_API_KEY is set, seeded fake
