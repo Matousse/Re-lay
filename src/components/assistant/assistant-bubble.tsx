@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -12,13 +12,17 @@ import {
   ClipboardList,
   Globe,
   Loader2,
+  Mic,
   Plug,
   Send,
   Sparkles,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { RichText } from "@/components/assistant/rich-text";
+import { useVoiceStream } from "@/components/assistant/use-voice-stream";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { withBasePath } from "@/lib/base-path";
@@ -267,12 +271,74 @@ function ThinkingBubble({ active }: { active: boolean }) {
   );
 }
 
+// A zero-length WAV used to unlock HTMLAudioElement playback on a user gesture,
+// so the browser lets us auto-play the TTS reply moments later.
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+
+// Split a reply into sentence-ish chunks for low-latency speech. The first chunk
+// is a single sentence (fastest first audio); later sentences batch up to ~100
+// chars so we don't fire a request per word.
+function chunkForSpeech(text: string): string[] {
+  const clean = stripMarkdown(text).trim();
+  if (!clean) return [];
+  const sentences = clean.match(/[^.!?…\n]+[.!?…]*/g) ?? [clean];
+  const chunks: string[] = [];
+  let buffer = "";
+  for (const sentence of sentences) {
+    const piece = sentence.trim();
+    if (!piece) continue;
+    buffer = buffer ? `${buffer} ${piece}` : piece;
+    const minLength = chunks.length === 0 ? 1 : 100;
+    if (buffer.length >= minLength) {
+      chunks.push(buffer);
+      buffer = "";
+    }
+  }
+  if (buffer) chunks.push(buffer);
+  return chunks;
+}
+
+// Light Markdown strip so the voice doesn't read "asterisk asterisk" aloud.
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*]\s+/gm, "")
+    .replace(/[_>#]/g, " ")
+    .replace(/\s+/g, " ");
+}
+
 export function AssistantBubble() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+  const [voiceOutput, setVoiceOutput] = useState(true);
   const nextId = useRef(0);
   const endRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Generation counter for spoken replies: bumping it makes an in-flight
+  // sentence-by-sentence playback loop bail (on mute or a newer turn).
+  const speakSeqRef = useRef(0);
+  // Whether the message being composed originated from the mic. Only voice turns
+  // get spoken back — typed messages stay text-only. `pendingSpeakRef` freezes
+  // that decision at send time so the async reply knows whether to speak.
+  const voiceTurnRef = useRef(false);
+  const pendingSpeakRef = useRef(false);
+  // Text already in the field when a voice turn starts; the live transcript is
+  // appended onto it so we never clobber what the user typed first.
+  const baseInputRef = useRef("");
+
+  // The live transcript streams straight into the input as the user speaks.
+  const applyTranscript = useCallback((text: string) => {
+    voiceTurnRef.current = true;
+    setInput(baseInputRef.current ? `${baseInputRef.current} ${text}` : text);
+  }, []);
+  const voice = useVoiceStream({ onTranscript: applyTranscript });
 
   function handleEvent(event: AssistantEvent) {
     setTranscript((current) => {
@@ -328,6 +394,75 @@ export function AssistantBubble() {
     );
   }
 
+  // Unlock audio playback on a user gesture (the mic press) so the later TTS
+  // reply isn't swallowed by the browser autoplay policy.
+  const primeAudio = useCallback(() => {
+    audioRef.current ??= new Audio();
+    audioRef.current.src = SILENT_WAV;
+    void audioRef.current.play().catch(() => {});
+  }, []);
+
+  // Stop any in-flight spoken reply: bump the generation so the playback loop
+  // bails, and pause the current clip.
+  const stopSpeaking = useCallback(() => {
+    speakSeqRef.current += 1;
+    audioRef.current?.pause();
+  }, []);
+
+  // Synthesize one sentence-ish chunk via Gradium (through our route).
+  const fetchTts = useCallback(async (text: string): Promise<Blob | null> => {
+    try {
+      const response = await fetch(withBasePath("/api/voice/speak"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      return response.ok ? await response.blob() : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Play one clip on the shared (autoplay-unlocked) audio element; resolves when
+  // it ends so the caller can chain the next chunk with no gap.
+  const playClip = useCallback(
+    (blob: Blob) =>
+      new Promise<void>((resolve) => {
+        audioRef.current ??= new Audio();
+        const url = URL.createObjectURL(blob);
+        const done = () => {
+          URL.revokeObjectURL(url);
+          resolve();
+        };
+        audioRef.current.onended = done;
+        audioRef.current.onerror = done;
+        audioRef.current.src = url;
+        void audioRef.current.play().catch(done);
+      }),
+    [],
+  );
+
+  // Speak an assistant reply aloud, sentence by sentence: play the first (short)
+  // chunk as soon as it's synthesized while the next one synthesizes in the
+  // background — so speech starts moments after the reply lands, not after the
+  // whole answer is synthesized. Best-effort: any failure just ends the voice.
+  const speak = useCallback(
+    async (fullText: string) => {
+      const chunks = chunkForSpeech(fullText);
+      if (chunks.length === 0) return;
+      const seq = (speakSeqRef.current += 1);
+      let pending = fetchTts(chunks[0]);
+      for (let i = 0; i < chunks.length; i++) {
+        const blob = await pending;
+        if (speakSeqRef.current !== seq) return; // superseded (mute / new turn)
+        pending = i + 1 < chunks.length ? fetchTts(chunks[i + 1]) : Promise.resolve(null);
+        if (blob) await playClip(blob);
+        if (speakSeqRef.current !== seq) return;
+      }
+    },
+    [fetchTts, playClip],
+  );
+
   const chat = useMutation({
     mutationFn: (messages: ChatMessage[]) => streamChat(messages, handleEvent),
     onSuccess: (data) => {
@@ -336,6 +471,7 @@ export function AssistantBubble() {
         ...current,
         { kind: "message", role: "assistant", content: data.reply },
       ]);
+      if (pendingSpeakRef.current) void speak(data.reply);
     },
     onError: () => {
       settleTranscript();
@@ -350,6 +486,10 @@ export function AssistantBubble() {
   function send(text: string) {
     const content = text.trim();
     if (content === "" || chat.isPending) return;
+    // Freeze the speak-this-turn decision now: only a voice-composed message,
+    // with voice output on, gets read back aloud.
+    pendingSpeakRef.current = voiceOutput && voiceTurnRef.current;
+    voiceTurnRef.current = false;
     setTranscript((current) => [...current, { kind: "message", role: "user", content }]);
     setInput("");
     const history = [
@@ -380,14 +520,30 @@ export function AssistantBubble() {
                 same tools as the agents — nothing ships without your yes
               </p>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Close assistant"
-              onClick={() => setOpen(false)}
-            >
-              <X aria-hidden />
-            </Button>
+            <div className="flex items-center gap-0.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={voiceOutput ? "Mute spoken replies" : "Speak replies aloud"}
+                aria-pressed={voiceOutput}
+                onClick={() =>
+                  setVoiceOutput((on) => {
+                    if (on) stopSpeaking();
+                    return !on;
+                  })
+                }
+              >
+                {voiceOutput ? <Volume2 aria-hidden /> : <VolumeX aria-hidden />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Close assistant"
+                onClick={() => setOpen(false)}
+              >
+                <X aria-hidden />
+              </Button>
+            </div>
           </div>
 
           <div className="flex-1 space-y-2.5 overflow-y-auto p-4">
@@ -450,11 +606,41 @@ export function AssistantBubble() {
           >
             <Input
               value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder="Ask about your dead deals…"
+              onChange={(event) => {
+                voiceTurnRef.current = false; // typing turns this into a text turn
+                setInput(event.target.value);
+              }}
+              placeholder="Ask, or hold the mic to talk…"
               aria-label="Message the assistant"
               autoFocus
             />
+            <Button
+              type="button"
+              size="icon"
+              variant={voice.status === "recording" ? "destructive" : "ghost"}
+              aria-label="Hold to talk"
+              aria-pressed={voice.status === "recording"}
+              disabled={chat.isPending}
+              className="shrink-0 touch-none select-none"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                // Capture the pointer so a finger drifting off the button doesn't
+                // cut the recording short — pointerup still fires on this button.
+                event.currentTarget.setPointerCapture(event.pointerId);
+                primeAudio();
+                baseInputRef.current = input.trim();
+                void voice.start();
+              }}
+              onPointerUp={() => voice.stop()}
+              onPointerCancel={() => voice.stop()}
+              onContextMenu={(event) => event.preventDefault()}
+            >
+              {voice.status === "connecting" ? (
+                <Loader2 className="animate-spin" aria-hidden />
+              ) : (
+                <Mic aria-hidden />
+              )}
+            </Button>
             <Button
               type="submit"
               size="icon"

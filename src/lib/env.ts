@@ -25,6 +25,11 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().min(1).optional(),
   RESEND_FROM: z.string().min(1).optional(),
   NOTIFY_EMAIL_TO: z.email().optional(),
+  // Gradium voice (STT + TTS) for the Ask Re:lay bubble. Set it and the mic
+  // button lights up (push-to-talk in, spoken replies out); unset, the bubble
+  // stays text-only. GRADIUM_VOICE_ID picks the TTS voice (see docs.gradium.ai).
+  GRADIUM_API_KEY: z.string().min(1).optional(),
+  GRADIUM_VOICE_ID: z.string().min(1).optional(),
 });
 
 // A .env copied from .env.example still carries <PLACEHOLDER> values — and
@@ -48,4 +53,6 @@ export const env = envSchema.parse({
   RESEND_API_KEY: clean(process.env.RESEND_API_KEY),
   RESEND_FROM: clean(process.env.RESEND_FROM),
   NOTIFY_EMAIL_TO: clean(process.env.NOTIFY_EMAIL_TO),
+  GRADIUM_API_KEY: clean(process.env.GRADIUM_API_KEY),
+  GRADIUM_VOICE_ID: clean(process.env.GRADIUM_VOICE_ID),
 });

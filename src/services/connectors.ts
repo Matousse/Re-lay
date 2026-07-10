@@ -67,9 +67,13 @@ export function platformIntegrations(): PlatformIntegration[] {
     },
     {
       id: "gradium",
-      status: "soon",
-      detail: "",
-      hint: "On the roadmap — talk to the Ask Re:lay bubble out loud, powered by Gradium voice.",
+      status: env.GRADIUM_API_KEY ? "connected" : "soon",
+      detail: env.GRADIUM_API_KEY
+        ? "Hold the mic on Ask Re:lay to talk — Gradium STT in, TTS out"
+        : "",
+      hint: env.GRADIUM_API_KEY
+        ? "Talk to the Ask Re:lay bubble out loud, powered by Gradium voice."
+        : "On the roadmap — talk to the Ask Re:lay bubble out loud, powered by Gradium voice.",
     },
   ];
 }
